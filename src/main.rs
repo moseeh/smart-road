@@ -2,6 +2,7 @@ use sdl2::event::Event;
 use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::keyboard::Keycode;
 use std::time::Duration;
+mod vehicle;
 
 fn main() -> Result<(), String> {
     // Initialize SDL2
