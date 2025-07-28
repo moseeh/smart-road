@@ -2,9 +2,12 @@ use sdl2::event::Event;
 use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::keyboard::Keycode;
 use std::time::Duration;
-mod vehicle;
 mod route;
+mod vehicle;
 mod velocities;
+
+use route::{Direction, Route};
+use vehicle::Vehicle;
 
 fn main() -> Result<(), String> {
     // Initialize SDL2
@@ -29,7 +32,7 @@ fn main() -> Result<(), String> {
 
     // Load the road image from assets
     let texture_creator = canvas.texture_creator();
-    let texture = texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
+    let road_texture = texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
 
     // Setup event loop
     let mut event_pump = sdl_context.event_pump()?;
@@ -47,7 +50,7 @@ fn main() -> Result<(), String> {
 
         // Clear screen, draw texture, update screen
         canvas.clear();
-        canvas.copy(&texture, None, None)?; // draw entire texture to the full window
+        canvas.copy(&road_texture, None, None)?; // draw entire texture to the full window
         canvas.present();
 
         std::thread::sleep(Duration::from_millis(16)); // ~60 FPS
