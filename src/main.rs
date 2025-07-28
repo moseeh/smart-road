@@ -32,9 +32,12 @@ fn main() -> Result<(), String> {
 
     // Load the road image from assets
     let texture_creator = canvas.texture_creator();
-    let road_texture = texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
+    let road_texture =
+        texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
 
-    // Setup event loop
+    // Add vehicle storage
+    let mut vehicles: Vec<Vehicle> = Vec::new();
+
     let mut event_pump = sdl_context.event_pump()?;
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -44,16 +47,55 @@ fn main() -> Result<(), String> {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+
+                // Vehicle creation events
+                Event::KeyDown {
+                    keycode: Some(Keycode::Up),
+                    ..
+                } => {
+                    // Generate vehicle from south to north
+                    // TODO: Add spawn logic
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => {
+                    // Generate vehicle from north to south
+                    // TODO: Add spawn logic
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Right),
+                    ..
+                } => {
+                    // Generate vehicle from west to east
+                    // TODO: Add spawn logic
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::R),
+                    ..
+                } => {
+                    // Generate vehicle from random direction
+                    // TODO: Add spawn logic
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Left),
+                    ..
+                } => {
+                    // Generate vehicle from east to west
+                    // TODO: Add spawn logic
+                }
                 _ => {}
             }
         }
 
-        // Clear screen, draw texture, update screen
+        // Clear screen, draw road, draw vehicles, update screen
         canvas.clear();
-        canvas.copy(&road_texture, None, None)?; // draw entire texture to the full window
-        canvas.present();
+        canvas.copy(&road_texture, None, None)?;
 
-        std::thread::sleep(Duration::from_millis(16)); // ~60 FPS
+        // TODO: Render vehicles here
+
+        canvas.present();
+        std::thread::sleep(Duration::from_millis(16));
     }
 
     Ok(())
