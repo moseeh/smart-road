@@ -13,6 +13,7 @@ pub struct Vehicle<'a> {
     pub width: u32,
     pub height: u32,
     pub safety_distance: f32,
+    pub position: (f32, f32),
 }
 
 impl<'a> Vehicle<'a> {
@@ -20,6 +21,7 @@ impl<'a> Vehicle<'a> {
         texture_creator: &'a TextureCreator<WindowContext>,
         route: Route,
         direction: Direction,
+        spawn_position: (f32, f32),
     ) -> Result<Self, String> {
         let mut rng = rand::rng();
         let car_index = rng.random_range(1..=5);
@@ -34,6 +36,7 @@ impl<'a> Vehicle<'a> {
             width: 60,
             height: 30,
             safety_distance: 50.0,
+            position: spawn_position,
         })
     }
 }
