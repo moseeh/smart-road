@@ -14,6 +14,7 @@ pub struct Vehicle<'a> {
     pub height: u32,
     pub safety_distance: f32,
     pub position: (f32, f32),
+    pub rotation: f64,
 }
 
 impl<'a> Vehicle<'a> {
@@ -27,6 +28,13 @@ impl<'a> Vehicle<'a> {
         let car_index = rng.random_range(1..=5);
         let path = format!("assets/Cars/car{}.png", car_index);
         let texture = texture_creator.load_texture(&path)?;
+        // Set rotation based on direction
+        let rotation = match direction {
+            Direction::North => 0.0,    // No rotation (assuming cars face north in image)
+            Direction::South => 180.0,  // Flip around
+            Direction::East => 90.0,    // Turn right 90 degrees
+            Direction::West => 270.0,   // Turn left 90 degrees (or -90.0)
+        };
 
         Ok(Self {
             texture,
@@ -37,6 +45,7 @@ impl<'a> Vehicle<'a> {
             height: 70,
             safety_distance: 50.0,
             position: spawn_position,
+            rotation,
         })
     }
 }
