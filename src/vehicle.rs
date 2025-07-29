@@ -33,8 +33,8 @@ impl<'a> Vehicle<'a> {
             route,
             direction,
             current_speed: Velocity::Medium,
-            width: 60,
-            height: 30,
+            width: 40,
+            height: 70,
             safety_distance: 50.0,
             position: spawn_position,
         })
