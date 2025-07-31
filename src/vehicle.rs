@@ -30,22 +30,38 @@ impl<'a> Vehicle<'a> {
         let texture = texture_creator.load_texture(&path)?;
         // Set rotation based on direction
         let rotation = match direction {
-            Direction::North => 0.0,    // No rotation (assuming cars face north in image)
-            Direction::South => 180.0,  // Flip around
-            Direction::East => 90.0,    // Turn right 90 degrees
-            Direction::West => 270.0,   // Turn left 90 degrees (or -90.0)
+            Direction::North => 0.0,   // No rotation (assuming cars face north in image)
+            Direction::South => 180.0, // Flip around
+            Direction::East => 90.0,   // Turn right 90 degrees
+            Direction::West => 270.0,  // Turn left 90 degrees (or -90.0)
         };
 
         Ok(Self {
             texture,
             route,
             direction,
-            current_speed: Velocity::Medium,
+            current_speed: Velocity::Fast,
             width: 40,
             height: 70,
             safety_distance: 50.0,
             position: spawn_position,
             rotation,
         })
+    }
+
+    pub fn update(&mut self) {
+        // No delta_time parameter needed
+        let pixels_per_frame = match self.current_speed {
+            Velocity::Slow => 3.0,   // 3 pixel per frame 
+            Velocity::Medium => 5.0, // 5 pixels per frame 
+            Velocity::Fast => 7.0,   // 7 pixels per frame 
+        };
+
+        match self.direction {
+            Direction::North => self.position.1 -= pixels_per_frame,
+            Direction::South => self.position.1 += pixels_per_frame,
+            Direction::East => self.position.0 += pixels_per_frame,
+            Direction::West => self.position.0 -= pixels_per_frame,
+        }
     }
 }
