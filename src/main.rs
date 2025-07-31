@@ -6,7 +6,8 @@ mod route;
 mod vehicle;
 mod velocities;
 
-use route::{Direction, Route};
+use rand::Rng;
+use route::*;
 use vehicle::Vehicle;
 
 fn main() -> Result<(), String> {
@@ -90,17 +91,54 @@ fn main() -> Result<(), String> {
                     ..
                 } => {
                     // Generate vehicle from east to west
-                    // TODO: Add spawn logic
+                    let route = get_random_route();
+                    let spawn_pos = get_spawn_position(Direction::West, route);
+                    match Vehicle::new(&texture_creator, route, Direction::West, spawn_pos) {
+                        Ok(vehicle) => vehicles.push(vehicle),
+                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    }
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::R),
+                    ..
+                } => {
+                    // Generate cars from a random direction
+                    let direction = get_random_direction();
+                    let route = get_random_route();
+                    let spawn_position = get_spawn_position(direction, route);
+
+                    match Vehicle::new(&texture_creator, route, direction, spawn_position) {
+                        Ok(vehicle) => vehicles.push(vehicle),
+                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    }
                 }
                 _ => {}
             }
         }
 
-        // Clear screen, draw road, draw vehicles, update screen
+        // Clear screen and draw
         canvas.clear();
         canvas.copy(&road_texture, None, None)?;
 
-        // TODO: Render vehicles here
+        // In your main loop, replace the vehicle rendering with:
+        for vehicle in &vehicles {
+            let dest_rect = sdl2::rect::Rect::new(
+                vehicle.position.0 as i32,
+                vehicle.position.1 as i32,
+                vehicle.width,
+                vehicle.height,
+            );
+
+            canvas.copy_ex(
+                &vehicle.texture,
+                None,
+                dest_rect,
+                vehicle.rotation,
+                None,
+                false,
+                false,
+            )?;
+        }
 
         canvas.present();
         std::thread::sleep(Duration::from_millis(16));
