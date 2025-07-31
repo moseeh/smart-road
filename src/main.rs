@@ -66,7 +66,12 @@ fn main() -> Result<(), String> {
                     ..
                 } => {
                     // Generate vehicle from north to south
-                    // TODO: Add spawn logic
+                    let route = get_random_route();
+                    let spawn_pos = get_spawn_position(Direction::South, route);
+                    match Vehicle::new(&texture_creator, route, Direction::South, spawn_pos) {
+                        Ok(vehicle) => vehicles.push(vehicle),
+                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    }
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Right),
