@@ -6,7 +6,6 @@ mod route;
 mod vehicle;
 mod velocities;
 
-use rand::Rng;
 use route::*;
 use vehicle::Vehicle;
 
@@ -114,6 +113,11 @@ fn main() -> Result<(), String> {
                 }
                 _ => {}
             }
+        }
+
+        // Update all vehicles
+        for vehicle in &mut vehicles {
+            vehicle.update();
         }
 
         // Clear screen and draw
