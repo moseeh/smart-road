@@ -2,9 +2,13 @@ use sdl2::event::Event;
 use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::keyboard::Keycode;
 use std::time::Duration;
-mod vehicle;
 mod route;
+mod vehicle;
 mod velocities;
+
+use rand::Rng;
+use route::*;
+use vehicle::Vehicle;
 
 fn main() -> Result<(), String> {
     // Initialize SDL2
@@ -29,9 +33,12 @@ fn main() -> Result<(), String> {
 
     // Load the road image from assets
     let texture_creator = canvas.texture_creator();
-    let texture = texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
+    let road_texture =
+        texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
 
-    // Setup event loop
+    // Add vehicle storage
+    let mut vehicles: Vec<Vehicle> = Vec::new();
+
     let mut event_pump = sdl_context.event_pump()?;
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -41,16 +48,100 @@ fn main() -> Result<(), String> {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+
+                // Vehicle creation events
+                Event::KeyDown {
+                    keycode: Some(Keycode::Up),
+                    ..
+                } => {
+                    // Generate vehicle from south to north
+                    let route = get_random_route();
+                    let spawn_pos = get_spawn_position(Direction::North, route);
+                    match Vehicle::new(&texture_creator, route, Direction::North, spawn_pos) {
+                        Ok(vehicle) => vehicles.push(vehicle),
+                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    }
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => {
+                    // Generate vehicle from north to south
+                    let route = get_random_route();
+                    let spawn_pos = get_spawn_position(Direction::South, route);
+                    match Vehicle::new(&texture_creator, route, Direction::South, spawn_pos) {
+                        Ok(vehicle) => vehicles.push(vehicle),
+                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    }
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Right),
+                    ..
+                } => {
+                    // Generate vehicle from west to east
+                    let route = get_random_route();
+                    let spawn_pos = get_spawn_position(Direction::East, route);
+                    match Vehicle::new(&texture_creator, route, Direction::East, spawn_pos) {
+                        Ok(vehicle) => vehicles.push(vehicle),
+                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    }
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Left),
+                    ..
+                } => {
+                    // Generate vehicle from east to west
+                    let route = get_random_route();
+                    let spawn_pos = get_spawn_position(Direction::West, route);
+                    match Vehicle::new(&texture_creator, route, Direction::West, spawn_pos) {
+                        Ok(vehicle) => vehicles.push(vehicle),
+                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    }
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::R),
+                    ..
+                } => {
+                    // Generate cars from a random direction
+                    let direction = get_random_direction();
+                    let route = get_random_route();
+                    let spawn_position = get_spawn_position(direction, route);
+
+                    match Vehicle::new(&texture_creator, route, direction, spawn_position) {
+                        Ok(vehicle) => vehicles.push(vehicle),
+                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    }
+                }
                 _ => {}
             }
         }
 
-        // Clear screen, draw texture, update screen
+        // Clear screen and draw
         canvas.clear();
-        canvas.copy(&texture, None, None)?; // draw entire texture to the full window
-        canvas.present();
+        canvas.copy(&road_texture, None, None)?;
 
-        std::thread::sleep(Duration::from_millis(16)); // ~60 FPS
+        // In your main loop, replace the vehicle rendering with:
+        for vehicle in &vehicles {
+            let dest_rect = sdl2::rect::Rect::new(
+                vehicle.position.0 as i32,
+                vehicle.position.1 as i32,
+                vehicle.width,
+                vehicle.height,
+            );
+
+            canvas.copy_ex(
+                &vehicle.texture,
+                None,
+                dest_rect,
+                vehicle.rotation,
+                None,
+                false,
+                false,
+            )?;
+        }
+
+        canvas.present();
+        std::thread::sleep(Duration::from_millis(16));
     }
 
     Ok(())
