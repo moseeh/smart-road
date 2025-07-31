@@ -25,6 +25,16 @@ pub fn get_random_route() -> Route {
     }
 }
 
+pub fn get_random_direction() -> Direction {
+    let mut rng = rand::rng();
+    match rng.random_range(0..4) {
+        0 => Direction::East,
+        1 => Direction::North,
+        2 => Direction::South,
+        _ => Direction::West
+    }
+}
+
 // Helper function to get spawn position based on direction and route
 pub fn get_spawn_position(direction: Direction, route: Route) -> (f32, f32) {
     match direction {
