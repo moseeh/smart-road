@@ -56,7 +56,14 @@ fn main() -> Result<(), String> {
                     // Generate vehicle from south to north
                     let route = get_random_route();
                     let spawn_pos = get_spawn_position(Direction::North, route);
-                    match Vehicle::new(&texture_creator, route, Direction::North, spawn_pos) {
+                    let turn_pos = get_turn_position(Direction::North, route);
+                    match Vehicle::new(
+                        &texture_creator,
+                        route,
+                        Direction::North,
+                        spawn_pos,
+                        turn_pos,
+                    ) {
                         Ok(vehicle) => vehicles.push(vehicle),
                         Err(e) => println!("Failed to create vehicle: {}", e),
                     }
@@ -68,7 +75,14 @@ fn main() -> Result<(), String> {
                     // Generate vehicle from north to south
                     let route = get_random_route();
                     let spawn_pos = get_spawn_position(Direction::South, route);
-                    match Vehicle::new(&texture_creator, route, Direction::South, spawn_pos) {
+                    let turn_pos = get_turn_position(Direction::South, route);
+                    match Vehicle::new(
+                        &texture_creator,
+                        route,
+                        Direction::South,
+                        spawn_pos,
+                        turn_pos,
+                    ) {
                         Ok(vehicle) => vehicles.push(vehicle),
                         Err(e) => println!("Failed to create vehicle: {}", e),
                     }
@@ -80,7 +94,14 @@ fn main() -> Result<(), String> {
                     // Generate vehicle from west to east
                     let route = get_random_route();
                     let spawn_pos = get_spawn_position(Direction::East, route);
-                    match Vehicle::new(&texture_creator, route, Direction::East, spawn_pos) {
+                    let turn_pos = get_turn_position(Direction::East, route);
+                    match Vehicle::new(
+                        &texture_creator,
+                        route,
+                        Direction::East,
+                        spawn_pos,
+                        turn_pos,
+                    ) {
                         Ok(vehicle) => vehicles.push(vehicle),
                         Err(e) => println!("Failed to create vehicle: {}", e),
                     }
@@ -92,7 +113,14 @@ fn main() -> Result<(), String> {
                     // Generate vehicle from east to west
                     let route = get_random_route();
                     let spawn_pos = get_spawn_position(Direction::West, route);
-                    match Vehicle::new(&texture_creator, route, Direction::West, spawn_pos) {
+                    let turn_pos = get_turn_position(Direction::West, route);
+                    match Vehicle::new(
+                        &texture_creator,
+                        route,
+                        Direction::West,
+                        spawn_pos,
+                        turn_pos,
+                    ) {
                         Ok(vehicle) => vehicles.push(vehicle),
                         Err(e) => println!("Failed to create vehicle: {}", e),
                     }
@@ -105,8 +133,10 @@ fn main() -> Result<(), String> {
                     let direction = get_random_direction();
                     let route = get_random_route();
                     let spawn_position = get_spawn_position(direction, route);
+                    let turn_pos = get_turn_position(direction, route);
 
-                    match Vehicle::new(&texture_creator, route, direction, spawn_position) {
+                    match Vehicle::new(&texture_creator, route, direction, spawn_position, turn_pos)
+                    {
                         Ok(vehicle) => vehicles.push(vehicle),
                         Err(e) => println!("Failed to create vehicle: {}", e),
                     }
@@ -124,7 +154,6 @@ fn main() -> Result<(), String> {
         canvas.clear();
         canvas.copy(&road_texture, None, None)?;
 
-        // In your main loop, replace the vehicle rendering with:
         for vehicle in &vehicles {
             let dest_rect = sdl2::rect::Rect::new(
                 vehicle.position.0 as i32,
