@@ -16,6 +16,7 @@ pub struct Vehicle<'a> {
     pub position: (f32, f32),
     pub turn_position: (f32, f32),
     pub rotation: f64,
+    pub has_turned: bool,
 }
 
 impl<'a> Vehicle<'a> {
@@ -49,6 +50,7 @@ impl<'a> Vehicle<'a> {
             position: spawn_position,
             turn_position,
             rotation,
+            has_turned: false,
         })
     }
 
