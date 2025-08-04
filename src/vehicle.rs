@@ -57,10 +57,25 @@ impl<'a> Vehicle<'a> {
     pub fn update(&mut self) {
         // No delta_time parameter needed
         let pixels_per_frame = match self.current_speed {
-            Velocity::Slow => 3.0,   // 3 pixel per frame 
-            Velocity::Medium => 5.0, // 5 pixels per frame 
-            Velocity::Fast => 7.0,   // 7 pixels per frame 
+            Velocity::Slow => 3.0,   // 3 pixel per frame
+            Velocity::Medium => 5.0, // 5 pixels per frame
+            Velocity::Fast => 7.0,   // 7 pixels per frame
         };
+
+        if !self.has_turned {
+            let center = (
+                self.position.0 + self.width as f32 / 2.0,
+                self.position.1 + self.height as f32 / 2.0,
+            );
+            let dx = center.0 - self.turn_position.0;
+            let dy = center.1 - self.turn_position.1;
+            let distance = (dx * dx + dy * dy).sqrt();
+
+            if distance <= 25.0 {
+                self.execute_turn(); // change direction & rotation
+                self.has_turned = true;
+            }
+        }
 
         match self.direction {
             Direction::North => self.position.1 -= pixels_per_frame,
