@@ -14,6 +14,7 @@ pub struct Vehicle<'a> {
     pub height: u32,
     pub safety_distance: f32,
     pub position: (f32, f32),
+    pub turn_position: (f32, f32),
     pub rotation: f64,
 }
 
@@ -23,6 +24,7 @@ impl<'a> Vehicle<'a> {
         route: Route,
         direction: Direction,
         spawn_position: (f32, f32),
+        turn_position: (f32, f32),
     ) -> Result<Self, String> {
         let mut rng = rand::rng();
         let car_index = rng.random_range(1..=5);
@@ -45,6 +47,7 @@ impl<'a> Vehicle<'a> {
             height: 70,
             safety_distance: 50.0,
             position: spawn_position,
+            turn_position,
             rotation,
         })
     }
