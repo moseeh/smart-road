@@ -69,4 +69,46 @@ impl<'a> Vehicle<'a> {
             Direction::West => self.position.0 -= pixels_per_frame,
         }
     }
+
+    pub fn execute_turn(&mut self) {
+        match self.route {
+            Route::Right => match self.direction {
+                Direction::North => {
+                    self.direction = Direction::East;
+                    self.rotation = 90.0;
+                }
+                Direction::South => {
+                    self.direction = Direction::West;
+                    self.rotation = 270.0;
+                }
+                Direction::East => {
+                    self.direction = Direction::South;
+                    self.rotation = 180.0;
+                }
+                Direction::West => {
+                    self.direction = Direction::North;
+                    self.rotation = 0.0;
+                }
+            },
+            Route::Left => match self.direction {
+                Direction::North => {
+                    self.direction = Direction::West;
+                    self.rotation = 270.0;
+                }
+                Direction::South => {
+                    self.direction = Direction::East;
+                    self.rotation = 90.0;
+                }
+                Direction::East => {
+                    self.direction = Direction::North;
+                    self.rotation = 0.0;
+                }
+                Direction::West => {
+                    self.direction = Direction::South;
+                    self.rotation = 180.0;
+                }
+            },
+            Route::Straight => {} // no turn
+        }
+    }
 }
