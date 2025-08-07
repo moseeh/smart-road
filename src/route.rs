@@ -31,7 +31,7 @@ pub fn get_random_direction() -> Direction {
         0 => Direction::East,
         1 => Direction::North,
         2 => Direction::South,
-        _ => Direction::West
+        _ => Direction::West,
     }
 }
 
@@ -70,5 +70,23 @@ pub fn get_spawn_position(direction: Direction, route: Route) -> (f32, f32) {
             };
             (980.0, lane_y) // Start at right of screen
         }
+    }
+}
+
+pub fn get_turn_position(direction: Direction, route: Route) -> (f32, f32) {
+    match route {
+        Route::Straight => (0.0, 0.0),
+        Route::Right => match direction {
+            Direction::North => (600.0, 610.0),
+            Direction::South => (350.0, 390.0),
+            Direction::East => (400.0, 635.0),
+            Direction::West => (600.0, 385.0),
+        },
+        Route::Left => match direction {
+            Direction::North => (500.0, 470.0),
+            Direction::South => (450.0, 540.0),
+            Direction::East => (550.0, 535.0),
+            Direction::West => (450.0, 485.0),
+        },
     }
 }
