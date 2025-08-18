@@ -184,3 +184,69 @@ fn main() -> Result<(), String> {
 
     Ok(())
 }
+
+pub fn is_safe_to_spawn(
+    vehicles: &[Vehicle],
+    direction: Direction,
+    route: Route,
+    spawn_pos: (f32, f32),
+) -> bool {
+    // vehicle size constants (same as Vehicle::new)
+    let width = 40.0;
+    let height = 70.0;
+
+    // Calculate spawn vehicle's bounding box center
+    let center = (spawn_pos.0 + width / 2.0, spawn_pos.1 + height / 2.0);
+
+    for vehicle in vehicles
+        .iter()
+        .filter(|v| v.direction == direction && v.route == route)
+    {
+        let other_center = (
+            vehicle.position.0 + vehicle.width as f32 / 2.0,
+            vehicle.position.1 + vehicle.height as f32 / 2.0,
+        );
+
+        match direction {
+            Direction::North => {
+                // cars move UP (y decreasing)
+                // check if existing car is ahead of the spawn (smaller y)
+                if other_center.1 < center.1 {
+                    let dist = center.1 - other_center.1 - vehicle.height as f32 / 2.0;
+                    if dist < vehicle.safety_distance {
+                        return false;
+                    }
+                }
+            }
+            Direction::South => {
+                // cars move DOWN (y increasing)
+                if other_center.1 > center.1 {
+                    let dist = other_center.1 - center.1 - vehicle.height as f32 / 2.0;
+                    if dist < vehicle.safety_distance {
+                        return false;
+                    }
+                }
+            }
+            Direction::East => {
+                // cars move RIGHT (x increasing)
+                if other_center.0 > center.0 {
+                    let dist = other_center.0 - center.0 - vehicle.width as f32 / 2.0;
+                    if dist < vehicle.safety_distance {
+                        return false;
+                    }
+                }
+            }
+            Direction::West => {
+                // cars move LEFT (x decreasing)
+                if other_center.0 < center.0 {
+                    let dist = center.0 - other_center.0 - vehicle.width as f32 / 2.0;
+                    if dist < vehicle.safety_distance {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    true
+}
