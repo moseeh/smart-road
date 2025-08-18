@@ -1,5 +1,12 @@
 use crate::vehicle::Vehicle;
 
+/// Intersection geometry on your 1000x1000 canvas:
+/// 300x300 centered square => [350,650] x [350,650]
+const IX_MIN: f32 = 350.0;
+const IY_MIN: f32 = 350.0;
+const IX_MAX: f32 = 650.0;
+const IY_MAX: f32 = 650.0;
+
 pub struct SmartIntersection {
     pub active_vehicles: Vec<Vehicle>,
     pub total_vehicles_passed: u32,
