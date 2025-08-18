@@ -9,6 +9,7 @@ mod velocities;
 use route::*;
 use vehicle::Vehicle;
 
+// Constants for the game design
 const WINDOW_WIDTH: u32 = 1000;
 const WINDOW_HEIGHT: u32 = 1000;
 const FRAME_DELAY: Duration = Duration::from_millis(16);
