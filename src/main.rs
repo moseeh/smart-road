@@ -269,3 +269,25 @@ pub fn is_safe_to_spawn(
 
     true
 }
+
+fn spawn_vehicle_for_direction<'a>(
+    vehicles: &mut Vec<Vehicle<'a>>,
+    texture_creator: &'a sdl2::render::TextureCreator<sdl2::video::WindowContext>,
+    direction: Option<Direction>,
+) {
+    let dir = match direction {
+        Some(d) => d,
+        None => get_random_direction(),
+    };
+
+    let route = get_random_route();
+    let spawn_pos = get_spawn_position(dir, route);
+    let turn_pos = get_turn_position(dir, route);
+
+    if is_safe_to_spawn(vehicles, dir, route, spawn_pos) {
+        match Vehicle::new(texture_creator, route, dir, spawn_pos, turn_pos) {
+            Ok(vehicle) => vehicles.push(vehicle),
+            Err(e) => println!("Failed to create vehicle: {}", e),
+        }
+    }
+}
