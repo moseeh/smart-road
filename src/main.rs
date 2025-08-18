@@ -23,7 +23,7 @@ fn main() -> Result<(), String> {
 
     // Create window and canvas
     let window = video_subsystem
-        .window("SMART ROAD", 1000, 1000)
+        .window("SMART ROAD", WINDOW_WIDTH, WINDOW_HEIGHT)
         .position_centered()
         .build()
         .map_err(|e| e.to_string())?;
