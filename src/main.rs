@@ -62,15 +62,18 @@ fn main() -> Result<(), String> {
                     let route = get_random_route();
                     let spawn_pos = get_spawn_position(Direction::North, route);
                     let turn_pos = get_turn_position(Direction::North, route);
-                    match Vehicle::new(
-                        &texture_creator,
-                        route,
-                        Direction::North,
-                        spawn_pos,
-                        turn_pos,
-                    ) {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
+
+                    if is_safe_to_spawn(&vehicles, Direction::North, route, spawn_pos) {
+                        match Vehicle::new(
+                            &texture_creator,
+                            route,
+                            Direction::North,
+                            spawn_pos,
+                            turn_pos,
+                        ) {
+                            Ok(vehicle) => vehicles.push(vehicle),
+                            Err(e) => println!("Failed to create vehicle: {}", e),
+                        }
                     }
                 }
                 Event::KeyDown {
@@ -81,15 +84,18 @@ fn main() -> Result<(), String> {
                     let route = get_random_route();
                     let spawn_pos = get_spawn_position(Direction::South, route);
                     let turn_pos = get_turn_position(Direction::South, route);
-                    match Vehicle::new(
-                        &texture_creator,
-                        route,
-                        Direction::South,
-                        spawn_pos,
-                        turn_pos,
-                    ) {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
+
+                    if is_safe_to_spawn(&vehicles, Direction::South, route, spawn_pos) {
+                        match Vehicle::new(
+                            &texture_creator,
+                            route,
+                            Direction::South,
+                            spawn_pos,
+                            turn_pos,
+                        ) {
+                            Ok(vehicle) => vehicles.push(vehicle),
+                            Err(e) => println!("Failed to create vehicle: {}", e),
+                        }
                     }
                 }
                 Event::KeyDown {
@@ -100,15 +106,18 @@ fn main() -> Result<(), String> {
                     let route = get_random_route();
                     let spawn_pos = get_spawn_position(Direction::East, route);
                     let turn_pos = get_turn_position(Direction::East, route);
-                    match Vehicle::new(
-                        &texture_creator,
-                        route,
-                        Direction::East,
-                        spawn_pos,
-                        turn_pos,
-                    ) {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
+
+                    if is_safe_to_spawn(&vehicles, Direction::East, route, spawn_pos) {
+                        match Vehicle::new(
+                            &texture_creator,
+                            route,
+                            Direction::East,
+                            spawn_pos,
+                            turn_pos,
+                        ) {
+                            Ok(vehicle) => vehicles.push(vehicle),
+                            Err(e) => println!("Failed to create vehicle: {}", e),
+                        }
                     }
                 }
                 Event::KeyDown {
@@ -119,15 +128,18 @@ fn main() -> Result<(), String> {
                     let route = get_random_route();
                     let spawn_pos = get_spawn_position(Direction::West, route);
                     let turn_pos = get_turn_position(Direction::West, route);
-                    match Vehicle::new(
-                        &texture_creator,
-                        route,
-                        Direction::West,
-                        spawn_pos,
-                        turn_pos,
-                    ) {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
+
+                    if is_safe_to_spawn(&vehicles, Direction::West, route, spawn_pos) {
+                        match Vehicle::new(
+                            &texture_creator,
+                            route,
+                            Direction::West,
+                            spawn_pos,
+                            turn_pos,
+                        ) {
+                            Ok(vehicle) => vehicles.push(vehicle),
+                            Err(e) => println!("Failed to create vehicle: {}", e),
+                        }
                     }
                 }
                 Event::KeyDown {
@@ -140,10 +152,17 @@ fn main() -> Result<(), String> {
                     let spawn_position = get_spawn_position(direction, route);
                     let turn_pos = get_turn_position(direction, route);
 
-                    match Vehicle::new(&texture_creator, route, direction, spawn_position, turn_pos)
-                    {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
+                    if is_safe_to_spawn(&vehicles, direction, route, spawn_position) {
+                        match Vehicle::new(
+                            &texture_creator,
+                            route,
+                            direction,
+                            spawn_position,
+                            turn_pos,
+                        ) {
+                            Ok(vehicle) => vehicles.push(vehicle),
+                            Err(e) => println!("Failed to create vehicle: {}", e),
+                        }
                     }
                 }
                 _ => {}
