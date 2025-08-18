@@ -9,6 +9,10 @@ mod velocities;
 use route::*;
 use vehicle::Vehicle;
 
+const WINDOW_WIDTH: u32 = 1000;
+const WINDOW_HEIGHT: u32 = 1000;
+const FRAME_DELAY: Duration = Duration::from_millis(16);
+
 fn main() -> Result<(), String> {
     // Initialize SDL2
     let sdl_context = sdl2::init()?;
