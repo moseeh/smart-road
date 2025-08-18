@@ -7,6 +7,12 @@ const IY_MIN: f32 = 350.0;
 const IX_MAX: f32 = 650.0;
 const IY_MAX: f32 = 650.0;
 
+#[derive(Clone, Copy, Debug)]
+struct Cell {
+    /// None => free, Some(idx) => reserved by vehicle index in `active_vehicles`.
+    reserved_by: Option<usize>,
+}
+
 pub struct SmartIntersection {
     pub active_vehicles: Vec<Vehicle>,
     pub total_vehicles_passed: u32,
