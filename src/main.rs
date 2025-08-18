@@ -55,115 +55,17 @@ fn main() -> Result<(), String> {
 
                 // Vehicle creation events
                 Event::KeyDown {
-                    keycode: Some(Keycode::Up),
-                    ..
+                    keycode: Some(key), ..
                 } => {
-                    // Generate vehicle from south to north
-                    let route = get_random_route();
-                    let spawn_pos = get_spawn_position(Direction::North, route);
-                    let turn_pos = get_turn_position(Direction::North, route);
-
-                    if is_safe_to_spawn(&vehicles, Direction::North, route, spawn_pos) {
-                        match Vehicle::new(
-                            &texture_creator,
-                            route,
-                            Direction::North,
-                            spawn_pos,
-                            turn_pos,
-                        ) {
-                            Ok(vehicle) => vehicles.push(vehicle),
-                            Err(e) => println!("Failed to create vehicle: {}", e),
-                        }
-                    }
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Down),
-                    ..
-                } => {
-                    // Generate vehicle from north to south
-                    let route = get_random_route();
-                    let spawn_pos = get_spawn_position(Direction::South, route);
-                    let turn_pos = get_turn_position(Direction::South, route);
-
-                    if is_safe_to_spawn(&vehicles, Direction::South, route, spawn_pos) {
-                        match Vehicle::new(
-                            &texture_creator,
-                            route,
-                            Direction::South,
-                            spawn_pos,
-                            turn_pos,
-                        ) {
-                            Ok(vehicle) => vehicles.push(vehicle),
-                            Err(e) => println!("Failed to create vehicle: {}", e),
-                        }
-                    }
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Right),
-                    ..
-                } => {
-                    // Generate vehicle from west to east
-                    let route = get_random_route();
-                    let spawn_pos = get_spawn_position(Direction::East, route);
-                    let turn_pos = get_turn_position(Direction::East, route);
-
-                    if is_safe_to_spawn(&vehicles, Direction::East, route, spawn_pos) {
-                        match Vehicle::new(
-                            &texture_creator,
-                            route,
-                            Direction::East,
-                            spawn_pos,
-                            turn_pos,
-                        ) {
-                            Ok(vehicle) => vehicles.push(vehicle),
-                            Err(e) => println!("Failed to create vehicle: {}", e),
-                        }
-                    }
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Left),
-                    ..
-                } => {
-                    // Generate vehicle from east to west
-                    let route = get_random_route();
-                    let spawn_pos = get_spawn_position(Direction::West, route);
-                    let turn_pos = get_turn_position(Direction::West, route);
-
-                    if is_safe_to_spawn(&vehicles, Direction::West, route, spawn_pos) {
-                        match Vehicle::new(
-                            &texture_creator,
-                            route,
-                            Direction::West,
-                            spawn_pos,
-                            turn_pos,
-                        ) {
-                            Ok(vehicle) => vehicles.push(vehicle),
-                            Err(e) => println!("Failed to create vehicle: {}", e),
-                        }
-                    }
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::R),
-                    ..
-                } => {
-                    // Generate cars from a random direction
-                    let direction = get_random_direction();
-                    let route = get_random_route();
-                    let spawn_position = get_spawn_position(direction, route);
-                    let turn_pos = get_turn_position(direction, route);
-
-                    if is_safe_to_spawn(&vehicles, direction, route, spawn_position) {
-                        match Vehicle::new(
-                            &texture_creator,
-                            route,
-                            direction,
-                            spawn_position,
-                            turn_pos,
-                        ) {
-                            Ok(vehicle) => vehicles.push(vehicle),
-                            Err(e) => println!("Failed to create vehicle: {}", e),
-                        }
-                    }
+                    let direction = match key {
+                        Keycode::Up => Some(Direction::North),
+                        Keycode::Down => Some(Direction::South),
+                        Keycode::Right => Some(Direction::East),
+                        Keycode::Left => Some(Direction::West),
+                        Keycode::R => None, // Random direction
+                        _ => continue,
+                    };
+                    spawn_vehicle_for_direction(&mut vehicles, &texture_creator, direction);
                 }
                 _ => {}
             }
