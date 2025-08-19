@@ -69,4 +69,45 @@ impl<'a> SmartIntersection<'a> {
             None
         }
     }
+
+    /// Try to reserve cells along the path for this vehicle
+    pub fn request_cells(
+        &mut self,
+        vehicle_id: usize,
+        cells: &[(usize, usize)], // list of (col,row) coordinates
+        entry_time: f32,
+        exit_time: f32,
+    ) -> bool {
+        // First check if all requested cells are free
+        for &(col, row) in cells {
+            let idx = self.cell_index(col, row);
+            if self.conflict(&self.grid[idx], entry_time, exit_time) {
+                return false; // conflict found, reject request
+            }
+        }
+
+        // No conflicts → reserve them
+        for &(col, row) in cells {
+            let idx = self.cell_index(col, row);
+            self.grid[idx].slots.push(TimeSlot {
+                start: entry_time,
+                end: exit_time,
+                vehicle_id,
+            });
+        }
+
+        true
+    }
+
+    /// Check if a cell has a conflicting reservation
+    fn conflict(&self, cell: &Cell, start: f32, end: f32) -> bool {
+        cell.slots
+            .iter()
+            .any(|slot| start < slot.end && slot.start < end)
+    }
+
+    /// Utility: convert (col,row) to index
+    fn cell_index(&self, col: usize, row: usize) -> usize {
+        row * self.cols + col
+    }
 }
