@@ -2,14 +2,15 @@ use sdl2::event::Event;
 use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::keyboard::Keycode;
 use std::time::Duration;
+mod intersection;
 mod route;
 mod vehicle;
 mod velocities;
-mod intersection;
 
+use intersection::*;
 use route::*;
 use vehicle::Vehicle;
-use intersection::*;
+use velocities::Velocity;
 
 // Constants for the game design
 const WINDOW_WIDTH: u32 = 1000;
@@ -42,11 +43,16 @@ fn main() -> Result<(), String> {
     let road_texture =
         texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
 
-    // Add vehicle storage
+    // Initialize intersection and vehicle storage
+    let mut intersection = SmartIntersection::new();
     let mut vehicles: Vec<Vehicle> = Vec::new();
+    let mut current_time = 0.0f32;
 
     let mut event_pump = sdl_context.event_pump()?;
     'running: loop {
+        // Increment time (assuming 60 FPS = 1/60 second per frame)
+        current_time += 1.0 / 60.0;
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -73,10 +79,11 @@ fn main() -> Result<(), String> {
             }
         }
 
-        // Update all vehicles
-        for vehicle in &mut vehicles {
-            vehicle.update();
-        }
+        // Update all vehicles with smart intersection management
+        update_vehicles_with_intersection(&mut vehicles, &mut intersection, current_time);
+
+        // Remove vehicles that have left the canvas
+        vehicles.retain(|vehicle| !vehicle.is_outside_canvas());
 
         // Clear screen and draw
         canvas.clear();
