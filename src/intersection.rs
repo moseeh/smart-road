@@ -13,8 +13,16 @@ struct Cell {
     reserved_by: Option<usize>,
 }
 
-pub struct SmartIntersection {
-    pub active_vehicles: Vec<Vehicle>,
+pub struct SmartIntersection<'a> {
+    pub active_vehicles: Vec<Vehicle<'a>>,
+
+    // --- reservation grid ---
+    zone_px: u32, // e.g., 30 => 10x10 grid
+    cols: usize,  // 300/zone_px
+    rows: usize,
+    grid: Vec<Cell>, // flattened rows*cols
+
+    // --- stats ---
     pub total_vehicles_passed: u32,
     pub max_velocity_recorded: f32,
     pub min_velocity_recorded: f32,
@@ -24,10 +32,17 @@ pub struct SmartIntersection {
     pub is_running: bool,
 }
 
-impl SmartIntersection {
+impl<'a> SmartIntersection<'a> {
     pub fn new() -> Self {
+        let zone_px = 15;
+        let cols = (300 / zone_px) as usize;
+        let rows = cols;
         Self {
             active_vehicles: Vec::new(),
+            zone_px,
+            cols,
+            rows,
+            grid: vec![Cell { reserved_by: None }; cols * rows],
             total_vehicles_passed: 0,
             max_velocity_recorded: 0.0,
             min_velocity_recorded: f32::MAX,
