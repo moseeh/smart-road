@@ -207,56 +207,64 @@ pub fn is_safe_to_spawn(
     let width = 40.0;
     let height = 70.0;
 
-    // Calculate spawn vehicle's bounding box center
-    let center = (spawn_pos.0 + width / 2.0, spawn_pos.1 + height / 2.0);
+    // Calculate spawn vehicle's effective dimensions based on direction
+    let (eff_width, eff_height) = match direction {
+        Direction::North | Direction::South => (width, height),
+        Direction::East | Direction::West => (height, width), // Rotated
+    };
+
+    // Calculate spawn vehicle's center
+    let spawn_center = (
+        spawn_pos.0 + eff_width / 2.0,
+        spawn_pos.1 + eff_height / 2.0,
+    );
 
     for vehicle in vehicles
         .iter()
         .filter(|v| v.direction == direction && v.route == route)
     {
-        let other_center = (
-            vehicle.position.0 + vehicle.width as f32 / 2.0,
-            vehicle.position.1 + vehicle.height as f32 / 2.0,
-        );
+        let other_center = vehicle.get_center();
+        let (other_eff_width, other_eff_height) = vehicle.get_effective_dimensions();
 
-        match direction {
+        // Calculate distance between vehicles
+        let distance = match direction {
             Direction::North => {
-                // cars move UP (y decreasing)
-                // check if existing car is ahead of the spawn (smaller y)
-                if other_center.1 < center.1 {
-                    let dist = center.1 - other_center.1 - vehicle.height as f32 / 2.0;
-                    if dist < vehicle.safety_distance {
-                        return false;
-                    }
+                // Cars move UP (y decreasing)
+                if other_center.1 < spawn_center.1 {
+                    spawn_center.1 - other_center.1 - (eff_height / 2.0 + other_eff_height / 2.0)
+                } else {
+                    continue; // Other vehicle is behind spawn position
                 }
             }
             Direction::South => {
-                // cars move DOWN (y increasing)
-                if other_center.1 > center.1 {
-                    let dist = other_center.1 - center.1 - vehicle.height as f32 / 2.0;
-                    if dist < vehicle.safety_distance {
-                        return false;
-                    }
+                // Cars move DOWN (y increasing)
+                if other_center.1 > spawn_center.1 {
+                    other_center.1 - spawn_center.1 - (eff_height / 2.0 + other_eff_height / 2.0)
+                } else {
+                    continue;
                 }
             }
             Direction::East => {
-                // cars move RIGHT (x increasing)
-                if other_center.0 > center.0 {
-                    let dist = other_center.0 - center.0 - vehicle.width as f32 / 2.0;
-                    if dist < vehicle.safety_distance {
-                        return false;
-                    }
+                // Cars move RIGHT (x increasing)
+                if other_center.0 > spawn_center.0 {
+                    other_center.0 - spawn_center.0 - (eff_width / 2.0 + other_eff_width / 2.0)
+                } else {
+                    continue;
                 }
             }
             Direction::West => {
-                // cars move LEFT (x decreasing)
-                if other_center.0 < center.0 {
-                    let dist = center.0 - other_center.0 - vehicle.width as f32 / 2.0;
-                    if dist < vehicle.safety_distance {
-                        return false;
-                    }
+                // Cars move LEFT (x decreasing)
+                if other_center.0 < spawn_center.0 {
+                    spawn_center.0 - other_center.0 - (eff_width / 2.0 + other_eff_width / 2.0)
+                } else {
+                    continue;
                 }
             }
+        };
+
+        // Check if distance is safe
+        if distance < vehicle.safety_distance {
+            return false;
         }
     }
 
