@@ -2,14 +2,15 @@ use sdl2::event::Event;
 use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::keyboard::Keycode;
 use std::time::Duration;
+mod intersection;
 mod route;
 mod vehicle;
 mod velocities;
-mod intersection;
 
+use intersection::*;
 use route::*;
 use vehicle::Vehicle;
-use intersection::*;
+use velocities::Velocity;
 
 // Constants for the game design
 const WINDOW_WIDTH: u32 = 1000;
@@ -42,11 +43,16 @@ fn main() -> Result<(), String> {
     let road_texture =
         texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
 
-    // Add vehicle storage
+    // Initialize intersection and vehicle storage
+    let mut intersection = SmartIntersection::new();
     let mut vehicles: Vec<Vehicle> = Vec::new();
+    let mut current_time = 0.0f32;
 
     let mut event_pump = sdl_context.event_pump()?;
     'running: loop {
+        // Increment time (assuming 60 FPS = 1/60 second per frame)
+        current_time += 1.0 / 60.0;
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -73,10 +79,11 @@ fn main() -> Result<(), String> {
             }
         }
 
-        // Update all vehicles
-        for vehicle in &mut vehicles {
-            vehicle.update();
-        }
+        // Update all vehicles with smart intersection management
+        update_vehicles_with_intersection(&mut vehicles, &mut intersection, current_time);
+
+        // Remove vehicles that have left the canvas
+        vehicles.retain(|vehicle| !vehicle.is_outside_canvas());
 
         // Clear screen and draw
         canvas.clear();
@@ -108,6 +115,95 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
+/// Update all vehicles with traffic and intersection management
+fn update_vehicles_with_intersection(
+    vehicles: &mut Vec<Vehicle>,
+    intersection: &mut SmartIntersection,
+    current_time: f32,
+) {
+    // Calculate traffic speeds for all vehicles first
+    let mut target_speeds = Vec::with_capacity(vehicles.len());
+
+    for i in 0..vehicles.len() {
+        let current_vehicle = &vehicles[i];
+
+        // If vehicle is past intersection, it can go fast (no collision risk)
+        if current_vehicle.is_past_intersection() {
+            target_speeds.push(Velocity::Fast);
+            continue;
+        }
+
+        let mut target_speed = Velocity::Fast;
+        let mut closest_distance = f32::MAX;
+        let mut required_distance = 0.0;
+
+        // Check traffic by manually iterating through other vehicles
+        for (j, other_vehicle) in vehicles.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+
+            // Only check vehicles that are ahead and in same lane
+            if current_vehicle.is_ahead_of_me(other_vehicle) {
+                let distance = current_vehicle.distance_to_vehicle(other_vehicle);
+                if distance < closest_distance {
+                    closest_distance = distance;
+                    required_distance = current_vehicle.get_safe_following_distance(other_vehicle);
+                }
+            }
+        }
+
+        // Determine speed based on closest vehicle ahead
+        if closest_distance != f32::MAX && closest_distance < required_distance {
+            if closest_distance < required_distance * 0.4 {
+                target_speed = Velocity::Slow; // Very close - slow down significantly
+            } else if closest_distance < required_distance * 0.8 {
+                target_speed = Velocity::Medium; // Getting close - moderate speed
+            }
+            // If distance >= required_distance * 0.8, keep Fast speed
+        }
+
+        target_speeds.push(target_speed);
+    }
+
+    // Now update each vehicle
+    for i in 0..vehicles.len() {
+        let vehicle = &mut vehicles[i];
+
+        // Reset intersection status if vehicle is far away
+        intersection.reset_vehicle_intersection_status(vehicle);
+
+        let traffic_speed = target_speeds[i];
+
+        // If vehicle is past intersection, ignore intersection management
+        let final_speed = if vehicle.is_past_intersection() {
+            Velocity::Fast // Full speed past intersection
+        } else {
+            // Check intersection requirements
+            let intersection_speed =
+                intersection.manage_vehicle_intersection_approach(vehicle, current_time);
+
+            // Take the slower of traffic and intersection requirements
+            match (traffic_speed, intersection_speed) {
+                (Velocity::Slow, _) | (_, Velocity::Slow) => Velocity::Slow,
+                (Velocity::Medium, _) | (_, Velocity::Medium) => Velocity::Medium,
+                (Velocity::Fast, Velocity::Fast) => Velocity::Fast,
+            }
+        };
+
+        // Apply the speed
+        vehicle.current_speed = final_speed;
+
+        // Update vehicle position
+        vehicle.update();
+
+        // Release cells behind the vehicle (only if in intersection area)
+        if vehicle.is_in_intersection() || vehicle.distance_to_intersection() < 50.0 {
+            release_cells_behind_vehicle(intersection, vehicle);
+        }
+    }
+}
+
 pub fn is_safe_to_spawn(
     vehicles: &[Vehicle],
     direction: Direction,
@@ -118,56 +214,64 @@ pub fn is_safe_to_spawn(
     let width = 40.0;
     let height = 70.0;
 
-    // Calculate spawn vehicle's bounding box center
-    let center = (spawn_pos.0 + width / 2.0, spawn_pos.1 + height / 2.0);
+    // Calculate spawn vehicle's effective dimensions based on direction
+    let (eff_width, eff_height) = match direction {
+        Direction::North | Direction::South => (width, height),
+        Direction::East | Direction::West => (height, width), // Rotated
+    };
+
+    // Calculate spawn vehicle's center
+    let spawn_center = (
+        spawn_pos.0 + eff_width / 2.0,
+        spawn_pos.1 + eff_height / 2.0,
+    );
 
     for vehicle in vehicles
         .iter()
         .filter(|v| v.direction == direction && v.route == route)
     {
-        let other_center = (
-            vehicle.position.0 + vehicle.width as f32 / 2.0,
-            vehicle.position.1 + vehicle.height as f32 / 2.0,
-        );
+        let other_center = vehicle.get_center();
+        let (other_eff_width, other_eff_height) = vehicle.get_effective_dimensions();
 
-        match direction {
+        // Calculate distance between vehicles
+        let distance = match direction {
             Direction::North => {
-                // cars move UP (y decreasing)
-                // check if existing car is ahead of the spawn (smaller y)
-                if other_center.1 < center.1 {
-                    let dist = center.1 - other_center.1 - vehicle.height as f32 / 2.0;
-                    if dist < vehicle.safety_distance {
-                        return false;
-                    }
+                // Cars move UP (y decreasing)
+                if other_center.1 < spawn_center.1 {
+                    spawn_center.1 - other_center.1 - (eff_height / 2.0 + other_eff_height / 2.0)
+                } else {
+                    continue; // Other vehicle is behind spawn position
                 }
             }
             Direction::South => {
-                // cars move DOWN (y increasing)
-                if other_center.1 > center.1 {
-                    let dist = other_center.1 - center.1 - vehicle.height as f32 / 2.0;
-                    if dist < vehicle.safety_distance {
-                        return false;
-                    }
+                // Cars move DOWN (y increasing)
+                if other_center.1 > spawn_center.1 {
+                    other_center.1 - spawn_center.1 - (eff_height / 2.0 + other_eff_height / 2.0)
+                } else {
+                    continue;
                 }
             }
             Direction::East => {
-                // cars move RIGHT (x increasing)
-                if other_center.0 > center.0 {
-                    let dist = other_center.0 - center.0 - vehicle.width as f32 / 2.0;
-                    if dist < vehicle.safety_distance {
-                        return false;
-                    }
+                // Cars move RIGHT (x increasing)
+                if other_center.0 > spawn_center.0 {
+                    other_center.0 - spawn_center.0 - (eff_width / 2.0 + other_eff_width / 2.0)
+                } else {
+                    continue;
                 }
             }
             Direction::West => {
-                // cars move LEFT (x decreasing)
-                if other_center.0 < center.0 {
-                    let dist = center.0 - other_center.0 - vehicle.width as f32 / 2.0;
-                    if dist < vehicle.safety_distance {
-                        return false;
-                    }
+                // Cars move LEFT (x decreasing)
+                if other_center.0 < spawn_center.0 {
+                    spawn_center.0 - other_center.0 - (eff_width / 2.0 + other_eff_width / 2.0)
+                } else {
+                    continue;
                 }
             }
+        };
+
+        // Check if distance is safe
+        if distance < vehicle.safety_distance {
+            return false;
         }
     }
 
