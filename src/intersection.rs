@@ -7,10 +7,16 @@ const IY_MIN: f32 = 350.0;
 const IX_MAX: f32 = 650.0;
 const IY_MAX: f32 = 650.0;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
+struct TimeSlot {
+    start: f32,        // when the car enters this cell
+    end: f32,          // when the car leaves this cell
+    vehicle_id: usize, // index in active_vehicles
+}
+
+#[derive(Clone)]
 struct Cell {
-    /// None => free, Some(idx) => reserved by vehicle index in `active_vehicles`.
-    reserved_by: Option<usize>,
+    slots: Vec<TimeSlot>, // reservations in chronological order
 }
 
 pub struct SmartIntersection<'a> {
@@ -42,7 +48,7 @@ impl<'a> SmartIntersection<'a> {
             zone_px,
             cols,
             rows,
-            grid: vec![Cell { reserved_by: None }; cols * rows],
+            grid: vec![Cell { slots: Vec::new() }; cols * rows],
             total_vehicles_passed: 0,
             max_velocity_recorded: 0.0,
             min_velocity_recorded: f32::MAX,
@@ -50,6 +56,17 @@ impl<'a> SmartIntersection<'a> {
             min_time_in_intersection: f32::MAX,
             close_calls: 0,
             is_running: true,
+        }
+    }
+    pub fn add_vehicle(&mut self, vehicle: Vehicle<'a>) {
+        self.active_vehicles.push(vehicle);
+    }
+
+    pub fn remove_vehicle(&mut self, vehicle_id: usize) -> Option<Vehicle<'a>> {
+        if let Some(pos) = self.active_vehicles.iter().position(|v| v.id == vehicle_id) {
+            Some(self.active_vehicles.remove(pos))
+        } else {
+            None
         }
     }
 }
