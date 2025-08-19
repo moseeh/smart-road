@@ -5,9 +5,11 @@ use std::time::Duration;
 mod route;
 mod vehicle;
 mod velocities;
+mod intersection;
 
 use route::*;
 use vehicle::Vehicle;
+use intersection::*;
 
 // Constants for the game design
 const WINDOW_WIDTH: u32 = 1000;
