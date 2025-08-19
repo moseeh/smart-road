@@ -108,6 +108,95 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
+/// Update all vehicles with traffic and intersection management
+fn update_vehicles_with_intersection(
+    vehicles: &mut Vec<Vehicle>,
+    intersection: &mut SmartIntersection,
+    current_time: f32,
+) {
+    // Calculate traffic speeds for all vehicles first
+    let mut target_speeds = Vec::with_capacity(vehicles.len());
+
+    for i in 0..vehicles.len() {
+        let current_vehicle = &vehicles[i];
+
+        // If vehicle is past intersection, it can go fast (no collision risk)
+        if current_vehicle.is_past_intersection() {
+            target_speeds.push(Velocity::Fast);
+            continue;
+        }
+
+        let mut target_speed = Velocity::Fast;
+        let mut closest_distance = f32::MAX;
+        let mut required_distance = 0.0;
+
+        // Check traffic by manually iterating through other vehicles
+        for (j, other_vehicle) in vehicles.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+
+            // Only check vehicles that are ahead and in same lane
+            if current_vehicle.is_ahead_of_me(other_vehicle) {
+                let distance = current_vehicle.distance_to_vehicle(other_vehicle);
+                if distance < closest_distance {
+                    closest_distance = distance;
+                    required_distance = current_vehicle.get_safe_following_distance(other_vehicle);
+                }
+            }
+        }
+
+        // Determine speed based on closest vehicle ahead
+        if closest_distance != f32::MAX && closest_distance < required_distance {
+            if closest_distance < required_distance * 0.4 {
+                target_speed = Velocity::Slow; // Very close - slow down significantly
+            } else if closest_distance < required_distance * 0.8 {
+                target_speed = Velocity::Medium; // Getting close - moderate speed
+            }
+            // If distance >= required_distance * 0.8, keep Fast speed
+        }
+
+        target_speeds.push(target_speed);
+    }
+
+    // Now update each vehicle
+    for i in 0..vehicles.len() {
+        let vehicle = &mut vehicles[i];
+
+        // Reset intersection status if vehicle is far away
+        intersection.reset_vehicle_intersection_status(vehicle);
+
+        let traffic_speed = target_speeds[i];
+
+        // If vehicle is past intersection, ignore intersection management
+        let final_speed = if vehicle.is_past_intersection() {
+            Velocity::Fast // Full speed past intersection
+        } else {
+            // Check intersection requirements
+            let intersection_speed =
+                intersection.manage_vehicle_intersection_approach(vehicle, current_time);
+
+            // Take the slower of traffic and intersection requirements
+            match (traffic_speed, intersection_speed) {
+                (Velocity::Slow, _) | (_, Velocity::Slow) => Velocity::Slow,
+                (Velocity::Medium, _) | (_, Velocity::Medium) => Velocity::Medium,
+                (Velocity::Fast, Velocity::Fast) => Velocity::Fast,
+            }
+        };
+
+        // Apply the speed
+        vehicle.current_speed = final_speed;
+
+        // Update vehicle position
+        vehicle.update();
+
+        // Release cells behind the vehicle (only if in intersection area)
+        if vehicle.is_in_intersection() || vehicle.distance_to_intersection() < 50.0 {
+            release_cells_behind_vehicle(intersection, vehicle);
+        }
+    }
+}
+
 pub fn is_safe_to_spawn(
     vehicles: &[Vehicle],
     direction: Direction,
