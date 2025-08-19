@@ -4,8 +4,10 @@ use rand::Rng;
 use sdl2::image::LoadTexture;
 use sdl2::render::{Texture, TextureCreator};
 use sdl2::video::WindowContext;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct Vehicle<'a> {
+    pub id: usize,
     pub texture: Texture<'a>,
     pub route: Route,
     pub direction: Direction,
@@ -18,6 +20,7 @@ pub struct Vehicle<'a> {
     pub rotation: f64,
     pub has_turned: bool,
 }
+static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 
 impl<'a> Vehicle<'a> {
     pub fn new(
@@ -40,6 +43,7 @@ impl<'a> Vehicle<'a> {
         };
 
         Ok(Self {
+            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             texture,
             route,
             direction,

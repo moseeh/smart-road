@@ -5,9 +5,16 @@ use std::time::Duration;
 mod route;
 mod vehicle;
 mod velocities;
+mod intersection;
 
 use route::*;
 use vehicle::Vehicle;
+use intersection::*;
+
+// Constants for the game design
+const WINDOW_WIDTH: u32 = 1000;
+const WINDOW_HEIGHT: u32 = 1000;
+const FRAME_DELAY: Duration = Duration::from_millis(16);
 
 fn main() -> Result<(), String> {
     // Initialize SDL2
@@ -19,7 +26,7 @@ fn main() -> Result<(), String> {
 
     // Create window and canvas
     let window = video_subsystem
-        .window("SMART ROAD", 1000, 1000)
+        .window("SMART ROAD", WINDOW_WIDTH, WINDOW_HEIGHT)
         .position_centered()
         .build()
         .map_err(|e| e.to_string())?;
@@ -50,96 +57,17 @@ fn main() -> Result<(), String> {
 
                 // Vehicle creation events
                 Event::KeyDown {
-                    keycode: Some(Keycode::Up),
-                    ..
+                    keycode: Some(key), ..
                 } => {
-                    // Generate vehicle from south to north
-                    let route = get_random_route();
-                    let spawn_pos = get_spawn_position(Direction::North, route);
-                    let turn_pos = get_turn_position(Direction::North, route);
-                    match Vehicle::new(
-                        &texture_creator,
-                        route,
-                        Direction::North,
-                        spawn_pos,
-                        turn_pos,
-                    ) {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
-                    }
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Down),
-                    ..
-                } => {
-                    // Generate vehicle from north to south
-                    let route = get_random_route();
-                    let spawn_pos = get_spawn_position(Direction::South, route);
-                    let turn_pos = get_turn_position(Direction::South, route);
-                    match Vehicle::new(
-                        &texture_creator,
-                        route,
-                        Direction::South,
-                        spawn_pos,
-                        turn_pos,
-                    ) {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
-                    }
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Right),
-                    ..
-                } => {
-                    // Generate vehicle from west to east
-                    let route = get_random_route();
-                    let spawn_pos = get_spawn_position(Direction::East, route);
-                    let turn_pos = get_turn_position(Direction::East, route);
-                    match Vehicle::new(
-                        &texture_creator,
-                        route,
-                        Direction::East,
-                        spawn_pos,
-                        turn_pos,
-                    ) {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
-                    }
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Left),
-                    ..
-                } => {
-                    // Generate vehicle from east to west
-                    let route = get_random_route();
-                    let spawn_pos = get_spawn_position(Direction::West, route);
-                    let turn_pos = get_turn_position(Direction::West, route);
-                    match Vehicle::new(
-                        &texture_creator,
-                        route,
-                        Direction::West,
-                        spawn_pos,
-                        turn_pos,
-                    ) {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
-                    }
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::R),
-                    ..
-                } => {
-                    // Generate cars from a random direction
-                    let direction = get_random_direction();
-                    let route = get_random_route();
-                    let spawn_position = get_spawn_position(direction, route);
-                    let turn_pos = get_turn_position(direction, route);
-
-                    match Vehicle::new(&texture_creator, route, direction, spawn_position, turn_pos)
-                    {
-                        Ok(vehicle) => vehicles.push(vehicle),
-                        Err(e) => println!("Failed to create vehicle: {}", e),
-                    }
+                    let direction = match key {
+                        Keycode::Up => Some(Direction::North),
+                        Keycode::Down => Some(Direction::South),
+                        Keycode::Right => Some(Direction::East),
+                        Keycode::Left => Some(Direction::West),
+                        Keycode::R => None, // Random direction
+                        _ => continue,
+                    };
+                    spawn_vehicle_for_direction(&mut vehicles, &texture_creator, direction);
                 }
                 _ => {}
             }
@@ -174,8 +102,96 @@ fn main() -> Result<(), String> {
         }
 
         canvas.present();
-        std::thread::sleep(Duration::from_millis(16));
+        std::thread::sleep(FRAME_DELAY);
     }
 
     Ok(())
+}
+
+pub fn is_safe_to_spawn(
+    vehicles: &[Vehicle],
+    direction: Direction,
+    route: Route,
+    spawn_pos: (f32, f32),
+) -> bool {
+    // vehicle size constants (same as Vehicle::new)
+    let width = 40.0;
+    let height = 70.0;
+
+    // Calculate spawn vehicle's bounding box center
+    let center = (spawn_pos.0 + width / 2.0, spawn_pos.1 + height / 2.0);
+
+    for vehicle in vehicles
+        .iter()
+        .filter(|v| v.direction == direction && v.route == route)
+    {
+        let other_center = (
+            vehicle.position.0 + vehicle.width as f32 / 2.0,
+            vehicle.position.1 + vehicle.height as f32 / 2.0,
+        );
+
+        match direction {
+            Direction::North => {
+                // cars move UP (y decreasing)
+                // check if existing car is ahead of the spawn (smaller y)
+                if other_center.1 < center.1 {
+                    let dist = center.1 - other_center.1 - vehicle.height as f32 / 2.0;
+                    if dist < vehicle.safety_distance {
+                        return false;
+                    }
+                }
+            }
+            Direction::South => {
+                // cars move DOWN (y increasing)
+                if other_center.1 > center.1 {
+                    let dist = other_center.1 - center.1 - vehicle.height as f32 / 2.0;
+                    if dist < vehicle.safety_distance {
+                        return false;
+                    }
+                }
+            }
+            Direction::East => {
+                // cars move RIGHT (x increasing)
+                if other_center.0 > center.0 {
+                    let dist = other_center.0 - center.0 - vehicle.width as f32 / 2.0;
+                    if dist < vehicle.safety_distance {
+                        return false;
+                    }
+                }
+            }
+            Direction::West => {
+                // cars move LEFT (x decreasing)
+                if other_center.0 < center.0 {
+                    let dist = center.0 - other_center.0 - vehicle.width as f32 / 2.0;
+                    if dist < vehicle.safety_distance {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    true
+}
+
+fn spawn_vehicle_for_direction<'a>(
+    vehicles: &mut Vec<Vehicle<'a>>,
+    texture_creator: &'a sdl2::render::TextureCreator<sdl2::video::WindowContext>,
+    direction: Option<Direction>,
+) {
+    let dir = match direction {
+        Some(d) => d,
+        None => get_random_direction(),
+    };
+
+    let route = get_random_route();
+    let spawn_pos = get_spawn_position(dir, route);
+    let turn_pos = get_turn_position(dir, route);
+
+    if is_safe_to_spawn(vehicles, dir, route, spawn_pos) {
+        match Vehicle::new(texture_creator, route, dir, spawn_pos, turn_pos) {
+            Ok(vehicle) => vehicles.push(vehicle),
+            Err(e) => println!("Failed to create vehicle: {}", e),
+        }
+    }
 }
