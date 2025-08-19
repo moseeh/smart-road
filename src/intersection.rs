@@ -1,4 +1,5 @@
 use crate::vehicle::Vehicle;
+use crate::velocities::Velocity;
 
 /// Intersection geometry on your 1000x1000 canvas:
 /// 300x300 centered square => [350,650] x [350,650]
@@ -58,6 +59,7 @@ impl<'a> SmartIntersection<'a> {
             is_running: true,
         }
     }
+
     pub fn add_vehicle(&mut self, vehicle: Vehicle<'a>) {
         self.active_vehicles.push(vehicle);
     }
@@ -80,6 +82,9 @@ impl<'a> SmartIntersection<'a> {
     ) -> bool {
         // First check if all requested cells are free
         for &(col, row) in cells {
+            if col >= self.cols || row >= self.rows {
+                continue; // Skip out of bounds cells
+            }
             let idx = self.cell_index(col, row);
             if self.conflict(&self.grid[idx], entry_time, exit_time) {
                 return false; // conflict found, reject request
@@ -88,6 +93,9 @@ impl<'a> SmartIntersection<'a> {
 
         // No conflicts → reserve them
         for &(col, row) in cells {
+            if col >= self.cols || row >= self.rows {
+                continue; // Skip out of bounds cells
+            }
             let idx = self.cell_index(col, row);
             self.grid[idx].slots.push(TimeSlot {
                 start: entry_time,
@@ -337,5 +345,82 @@ impl<'a> SmartIntersection<'a> {
     /// Utility: convert (col,row) to index
     fn cell_index(&self, col: usize, row: usize) -> usize {
         row * self.cols + col
+    }
+}
+
+/// Helper function to release cells behind a moving vehicle
+pub fn release_cells_behind_vehicle(intersection: &mut SmartIntersection, vehicle: &Vehicle) {
+    let zone_px = intersection.zone_px as f32;
+
+    // Calculate cells behind the vehicle based on its direction
+    let cells_to_release = match vehicle.direction {
+        crate::route::Direction::North => {
+            // Release cells below (higher Y values)
+            let behind_y = vehicle.position.1 + vehicle.height as f32 + zone_px;
+            if behind_y >= IY_MIN && behind_y < IY_MAX {
+                let col =
+                    ((vehicle.position.0 + vehicle.width as f32 / 2.0 - IX_MIN) / zone_px) as usize;
+                let row = ((behind_y - IY_MIN) / zone_px) as usize;
+                if col < intersection.cols && row < intersection.rows {
+                    vec![(col, row)]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            }
+        }
+        crate::route::Direction::South => {
+            // Release cells above (lower Y values)
+            let behind_y = vehicle.position.1 - zone_px;
+            if behind_y >= IY_MIN && behind_y < IY_MAX {
+                let col =
+                    ((vehicle.position.0 + vehicle.width as f32 / 2.0 - IX_MIN) / zone_px) as usize;
+                let row = ((behind_y - IY_MIN) / zone_px) as usize;
+                if col < intersection.cols && row < intersection.rows {
+                    vec![(col, row)]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            }
+        }
+        crate::route::Direction::East => {
+            // Release cells to the left (lower X values)
+            let behind_x = vehicle.position.0 - zone_px;
+            if behind_x >= IX_MIN && behind_x < IX_MAX {
+                let col = ((behind_x - IX_MIN) / zone_px) as usize;
+                let row = ((vehicle.position.1 + vehicle.height as f32 / 2.0 - IY_MIN) / zone_px)
+                    as usize;
+                if col < intersection.cols && row < intersection.rows {
+                    vec![(col, row)]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            }
+        }
+        crate::route::Direction::West => {
+            // Release cells to the right (higher X values)
+            let behind_x = vehicle.position.0 + vehicle.width as f32 + zone_px;
+            if behind_x >= IX_MIN && behind_x < IX_MAX {
+                let col = ((behind_x - IX_MIN) / zone_px) as usize;
+                let row = ((vehicle.position.1 + vehicle.height as f32 / 2.0 - IY_MIN) / zone_px)
+                    as usize;
+                if col < intersection.cols && row < intersection.rows {
+                    vec![(col, row)]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            }
+        }
+    };
+
+    if !cells_to_release.is_empty() {
+        intersection.release_specific_cells(&cells_to_release, vehicle.id);
     }
 }
