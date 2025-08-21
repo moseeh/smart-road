@@ -92,6 +92,36 @@ impl<'a> Vehicle<'a> {
             Direction::West => self.position.0 -= pixels_per_frame,
         }
     }
+    pub fn get_visual_bounds(&self) -> (f32, f32, f32, f32) {
+        let center_x = self.position.0 + self.width as f32 / 2.0;
+        let center_y = self.position.1 + self.height as f32 / 2.0;
+
+        match self.rotation as i32 % 360 {
+            0 | 180 => {
+                // No rotation change needed
+                (
+                    self.position.0,
+                    self.position.1,
+                    self.width as f32,
+                    self.height as f32,
+                )
+            }
+            90 | 270 => {
+                // Width/height swap, position adjusts
+                let visual_width = self.height as f32;
+                let visual_height = self.width as f32;
+                let visual_x = center_x - visual_width / 2.0;
+                let visual_y = center_y - visual_height / 2.0;
+                (visual_x, visual_y, visual_width, visual_height)
+            }
+            _ => (
+                self.position.0,
+                self.position.1,
+                self.width as f32,
+                self.height as f32,
+            ),
+        }
+    }
 
     pub fn execute_turn(&mut self) {
         match self.route {
@@ -142,28 +172,30 @@ impl<'a> Vehicle<'a> {
             self.position.1 + self.height as f32 / 2.0,
         )
     }
-
-    pub fn get_effective_dimensions(&self) -> (f32, f32) {
-        match self.direction {
-            Direction::North | Direction::South => (self.width as f32, self.height as f32),
-            Direction::East | Direction::West => (self.height as f32, self.width as f32),
-        }
+    pub fn get_visual_center(&self) -> (f32, f32) {
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
+        (vx + vw / 2.0, vy + vh / 2.0)
     }
 
+    pub fn get_effective_dimensions(&self) -> (f32, f32) {
+        let (_, _, vw, vh) = self.get_visual_bounds();
+        (vw, vh)
+    }
     pub fn get_front_position(&self) -> (f32, f32) {
-        let center = self.get_center();
-        let (eff_width, eff_height) = self.get_effective_dimensions();
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
+        let center = (vx + vw / 2.0, vy + vh / 2.0);
 
         match self.direction {
-            Direction::North => (center.0, self.position.1),
-            Direction::South => (center.0, self.position.1 + eff_height),
-            Direction::East => (self.position.0 + eff_width, center.1),
-            Direction::West => (self.position.0, center.1),
+            Direction::North => (center.0, vy),
+            Direction::South => (center.0, vy + vh),
+            Direction::East => (vx + vw, center.1),
+            Direction::West => (vx, center.1),
         }
     }
 
     pub fn distance_to_intersection(&self) -> f32 {
-        let center = self.get_center();
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
+        let center = (vx + vw / 2.0, vy + vh / 2.0);
 
         match self.direction {
             Direction::North => {
@@ -198,8 +230,12 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn is_in_intersection(&self) -> bool {
-        let center = self.get_center();
-        center.0 >= 350.0 && center.0 <= 650.0 && center.1 >= 350.0 && center.1 <= 650.0
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
+        // Check if any part of visual bounds overlaps intersection
+        let right = vx + vw;
+        let bottom = vy + vh;
+
+        !(right < 350.0 || vx > 650.0 || bottom < 350.0 || vy > 650.0)
     }
 
     pub fn is_in_same_lane(&self, other: &Vehicle) -> bool {
@@ -207,9 +243,9 @@ impl<'a> Vehicle<'a> {
             return false;
         }
 
-        let my_center = self.get_center();
-        let other_center = other.get_center();
-        let lane_tolerance = 30.0; // Allow some variance
+        let my_center = self.get_visual_center();
+        let other_center = other.get_visual_center();
+        let lane_tolerance = 30.0;
 
         match self.direction {
             Direction::North | Direction::South => {
@@ -226,8 +262,8 @@ impl<'a> Vehicle<'a> {
             return false;
         }
 
-        let my_center = self.get_center();
-        let other_center = other.get_center();
+        let my_center = self.get_visual_center();
+        let other_center = other.get_visual_center();
 
         match self.direction {
             Direction::North => other_center.1 < my_center.1,
@@ -236,21 +272,20 @@ impl<'a> Vehicle<'a> {
             Direction::West => other_center.0 < my_center.0,
         }
     }
-
     pub fn is_past_intersection(&self) -> bool {
-        let center = self.get_center();
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
 
         match self.direction {
-            Direction::North => center.1 < 350.0, // Past intersection going north
-            Direction::South => center.1 > 650.0, // Past intersection going south
-            Direction::East => center.0 > 650.0,  // Past intersection going east
-            Direction::West => center.0 < 350.0,  // Past intersection going west
+            Direction::North => vy + vh < 350.0, // Entire vehicle past intersection
+            Direction::South => vy > 650.0,
+            Direction::East => vx > 650.0,
+            Direction::West => vx + vw < 350.0,
         }
     }
 
     pub fn distance_to_vehicle(&self, other: &Vehicle) -> f32 {
-        let my_center = self.get_center();
-        let other_center = other.get_center();
+        let my_center = self.get_visual_center();
+        let other_center = other.get_visual_center();
 
         match self.direction {
             Direction::North | Direction::South => (my_center.1 - other_center.1).abs(),
@@ -259,18 +294,21 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn get_safe_following_distance(&self, lead_vehicle: &Vehicle) -> f32 {
-        let my_length = match self.direction {
-            Direction::North | Direction::South => self.height as f32,
-            Direction::East | Direction::West => self.width as f32,
+        let (_, _, _, my_length) = self.get_visual_bounds();
+        let (_, _, _, lead_length) = lead_vehicle.get_visual_bounds();
+
+        // For direction-based length, use visual bounds
+        let my_effective_length = match self.direction {
+            Direction::North | Direction::South => my_length,
+            Direction::East | Direction::West => my_length, // Already correct from visual bounds
         };
 
-        let lead_length = match lead_vehicle.direction {
-            Direction::North | Direction::South => lead_vehicle.height as f32,
-            Direction::East | Direction::West => lead_vehicle.width as f32,
+        let lead_effective_length = match lead_vehicle.direction {
+            Direction::North | Direction::South => lead_length,
+            Direction::East | Direction::West => lead_length,
         };
 
-        // Safe distance = half of each car's length + safety buffer
-        (my_length / 2.0) + (lead_length / 2.0) + self.safety_distance
+        (my_effective_length / 2.0) + (lead_effective_length / 2.0) + self.safety_distance
     }
 
     pub fn should_slow_for_traffic(&self, vehicles: &[Vehicle]) -> Option<Velocity> {

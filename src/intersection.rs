@@ -218,7 +218,6 @@ impl<'a> SmartIntersection<'a> {
         let mut cells = Vec::new();
         let zone_px = self.zone_px as f32;
 
-        // Get vehicle's path through intersection based on route
         match vehicle.route {
             crate::route::Route::Straight => {
                 self.get_straight_path_cells(vehicle, zone_px, &mut cells);
@@ -240,22 +239,33 @@ impl<'a> SmartIntersection<'a> {
         zone_px: f32,
         cells: &mut Vec<(usize, usize)>,
     ) {
-        let center = vehicle.get_center();
+        let (vx, vy, vw, vh) = vehicle.get_visual_bounds();
+        let visual_center = (vx + vw / 2.0, vy + vh / 2.0);
 
         match vehicle.direction {
             crate::route::Direction::North | crate::route::Direction::South => {
-                let col = ((center.0 - IX_MIN) / zone_px) as usize;
-                if col < self.cols {
-                    for row in 0..self.rows {
-                        cells.push((col, row));
+                // Reserve column(s) that the visual bounds occupy
+                let left_col = ((vx - IX_MIN) / zone_px) as usize;
+                let right_col = ((vx + vw - IX_MIN) / zone_px) as usize;
+
+                for col in left_col..=right_col.min(self.cols - 1) {
+                    if col < self.cols {
+                        for row in 0..self.rows {
+                            cells.push((col, row));
+                        }
                     }
                 }
             }
             crate::route::Direction::East | crate::route::Direction::West => {
-                let row = ((center.1 - IY_MIN) / zone_px) as usize;
-                if row < self.rows {
-                    for col in 0..self.cols {
-                        cells.push((col, row));
+                // Reserve row(s) that the visual bounds occupy
+                let top_row = ((vy - IY_MIN) / zone_px) as usize;
+                let bottom_row = ((vy + vh - IY_MIN) / zone_px) as usize;
+
+                for row in top_row..=bottom_row.min(self.rows - 1) {
+                    if row < self.rows {
+                        for col in 0..self.cols {
+                            cells.push((col, row));
+                        }
                     }
                 }
             }
@@ -268,44 +278,52 @@ impl<'a> SmartIntersection<'a> {
         zone_px: f32,
         cells: &mut Vec<(usize, usize)>,
     ) {
-        // For right turns, reserve a wider path including the turn area
-        let center = vehicle.get_center();
+        let (vx, vy, vw, vh) = vehicle.get_visual_bounds();
 
         match vehicle.direction {
             crate::route::Direction::North => {
-                // Coming from south, turning east
-                let start_col = ((center.0 - IX_MIN) / zone_px) as usize;
+                // Vehicle visual bounds occupy certain cells
+                let start_col = ((vx - IX_MIN) / zone_px) as usize;
                 let end_col = self.cols;
-                for row in 0..self.rows {
+                let start_row = ((vy - IY_MIN) / zone_px) as usize;
+                let end_row = ((vy + vh - IY_MIN) / zone_px) as usize + 5; // Extra for turn
+
+                for row in start_row..end_row.min(self.rows) {
                     for col in start_col..end_col.min(self.cols) {
                         cells.push((col, row));
                     }
                 }
             }
             crate::route::Direction::South => {
-                // Coming from north, turning west
-                let end_col = ((center.0 - IX_MIN) / zone_px) as usize + 1;
-                for row in 0..self.rows {
+                let end_col = ((vx + vw - IX_MIN) / zone_px) as usize + 1;
+                let start_row = ((vy - IX_MIN) / zone_px) as usize;
+                let end_row = ((vy + vh - IY_MIN) / zone_px) as usize + 5;
+
+                for row in start_row..end_row.min(self.rows) {
                     for col in 0..end_col.min(self.cols) {
                         cells.push((col, row));
                     }
                 }
             }
             crate::route::Direction::East => {
-                // Coming from west, turning south
-                let start_row = ((center.1 - IY_MIN) / zone_px) as usize;
+                let start_col = ((vx - IX_MIN) / zone_px) as usize;
+                let end_col = ((vx + vw - IX_MIN) / zone_px) as usize + 5;
+                let start_row = ((vy - IY_MIN) / zone_px) as usize;
                 let end_row = self.rows;
+
                 for row in start_row..end_row.min(self.rows) {
-                    for col in 0..self.cols {
+                    for col in start_col..end_col.min(self.cols) {
                         cells.push((col, row));
                     }
                 }
             }
             crate::route::Direction::West => {
-                // Coming from east, turning north
-                let end_row = ((center.1 - IY_MIN) / zone_px) as usize + 1;
+                let start_col = ((vx - IX_MIN) / zone_px) as usize;
+                let end_col = ((vx + vw - IX_MIN) / zone_px) as usize + 5;
+                let end_row = ((vy + vh - IY_MIN) / zone_px) as usize + 1;
+
                 for row in 0..end_row.min(self.rows) {
-                    for col in 0..self.cols {
+                    for col in start_col..end_col.min(self.cols) {
                         cells.push((col, row));
                     }
                 }
@@ -319,7 +337,6 @@ impl<'a> SmartIntersection<'a> {
         _zone_px: f32,
         cells: &mut Vec<(usize, usize)>,
     ) {
-        // Left turns need even more space - reserve most of the intersection
         for row in 0..self.rows {
             for col in 0..self.cols {
                 cells.push((col, row));
@@ -351,69 +368,81 @@ impl<'a> SmartIntersection<'a> {
 /// Helper function to release cells behind a moving vehicle
 pub fn release_cells_behind_vehicle(intersection: &mut SmartIntersection, vehicle: &Vehicle) {
     let zone_px = intersection.zone_px as f32;
+    let (vx, vy, vw, vh) = vehicle.get_visual_bounds();
 
-    // Calculate cells behind the vehicle based on its direction
     let cells_to_release = match vehicle.direction {
         crate::route::Direction::North => {
-            // Release cells below (higher Y values)
-            let behind_y = vehicle.position.1 + vehicle.height as f32 + zone_px;
+            // Release cells below visual bounds
+            let behind_y = vy + vh + zone_px;
             if behind_y >= IY_MIN && behind_y < IY_MAX {
-                let col =
-                    ((vehicle.position.0 + vehicle.width as f32 / 2.0 - IX_MIN) / zone_px) as usize;
+                let left_col = ((vx - IX_MIN) / zone_px) as usize;
+                let right_col = ((vx + vw - IX_MIN) / zone_px) as usize;
                 let row = ((behind_y - IY_MIN) / zone_px) as usize;
-                if col < intersection.cols && row < intersection.rows {
-                    vec![(col, row)]
-                } else {
-                    vec![]
+                
+                let mut cells = Vec::new();
+                for col in left_col..=right_col.min(intersection.cols - 1) {
+                    if col < intersection.cols && row < intersection.rows {
+                        cells.push((col, row));
+                    }
                 }
+                cells
             } else {
                 vec![]
             }
         }
         crate::route::Direction::South => {
-            // Release cells above (lower Y values)
-            let behind_y = vehicle.position.1 - zone_px;
-            if behind_y >= IY_MIN && behind_y < IY_MAX {
-                let col =
-                    ((vehicle.position.0 + vehicle.width as f32 / 2.0 - IX_MIN) / zone_px) as usize;
+            // Release cells above visual bounds
+            let behind_y = vy - zone_px;
+            if behind_y >= IY_MIN {
+                let left_col = ((vx - IX_MIN) / zone_px) as usize;
+                let right_col = ((vx + vw - IX_MIN) / zone_px) as usize;
                 let row = ((behind_y - IY_MIN) / zone_px) as usize;
-                if col < intersection.cols && row < intersection.rows {
-                    vec![(col, row)]
-                } else {
-                    vec![]
+                
+                let mut cells = Vec::new();
+                for col in left_col..=right_col.min(intersection.cols - 1) {
+                    if col < intersection.cols && row < intersection.rows {
+                        cells.push((col, row));
+                    }
                 }
+                cells
             } else {
                 vec![]
             }
         }
         crate::route::Direction::East => {
-            // Release cells to the left (lower X values)
-            let behind_x = vehicle.position.0 - zone_px;
-            if behind_x >= IX_MIN && behind_x < IX_MAX {
+            // Release cells to the left of visual bounds
+            let behind_x = vx - zone_px;
+            if behind_x >= IX_MIN {
+                let top_row = ((vy - IY_MIN) / zone_px) as usize;
+                let bottom_row = ((vy + vh - IY_MIN) / zone_px) as usize;
                 let col = ((behind_x - IX_MIN) / zone_px) as usize;
-                let row = ((vehicle.position.1 + vehicle.height as f32 / 2.0 - IY_MIN) / zone_px)
-                    as usize;
-                if col < intersection.cols && row < intersection.rows {
-                    vec![(col, row)]
-                } else {
-                    vec![]
+                
+                let mut cells = Vec::new();
+                for row in top_row..=bottom_row.min(intersection.rows - 1) {
+                    if col < intersection.cols && row < intersection.rows {
+                        cells.push((col, row));
+                    }
                 }
+                cells
             } else {
                 vec![]
             }
         }
         crate::route::Direction::West => {
-            // Release cells to the right (higher X values)
-            let behind_x = vehicle.position.0 + vehicle.width as f32 + zone_px;
-            if behind_x >= IX_MIN && behind_x < IX_MAX {
+            // Release cells to the right of visual bounds
+            let behind_x = vx + vw + zone_px;
+            if behind_x < IX_MAX {
+                let top_row = ((vy - IY_MIN) / zone_px) as usize;
+                let bottom_row = ((vy + vh - IY_MIN) / zone_px) as usize;
                 let col = ((behind_x - IX_MIN) / zone_px) as usize;
-                let row = ((vehicle.position.1 + vehicle.height as f32 / 2.0 - IY_MIN) / zone_px)
-                    as usize;
-                if col < intersection.cols && row < intersection.rows {
-                    vec![(col, row)]
-                } else {
-                    vec![]
+                
+                let mut cells = Vec::new();
+                for row in top_row..=bottom_row.min(intersection.rows - 1) {
+                    if col < intersection.cols && row < intersection.rows {
+                        cells.push((col, row));
+                    }
                 }
+                cells
             } else {
                 vec![]
             }

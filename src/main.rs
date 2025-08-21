@@ -210,59 +210,67 @@ pub fn is_safe_to_spawn(
     route: Route,
     spawn_pos: (f32, f32),
 ) -> bool {
-    // vehicle size constants (same as Vehicle::new)
-    let width = 40.0;
-    let height = 70.0;
-
-    // Calculate spawn vehicle's effective dimensions based on direction
-    let (eff_width, eff_height) = match direction {
-        Direction::North | Direction::South => (width, height),
-        Direction::East | Direction::West => (height, width), // Rotated
+    // Create a temporary vehicle to get its visual bounds at spawn position
+    let temp_rotation = match direction {
+        Direction::North => 0.0,
+        Direction::South => 180.0,
+        Direction::East => 90.0,
+        Direction::West => 270.0,
     };
 
-    // Calculate spawn vehicle's center
-    let spawn_center = (
-        spawn_pos.0 + eff_width / 2.0,
-        spawn_pos.1 + eff_height / 2.0,
-    );
+    // Calculate visual bounds for the spawn vehicle
+    let width = 40.0;
+    let height = 70.0;
+    let center_x = spawn_pos.0 + width / 2.0;
+    let center_y = spawn_pos.1 + height / 2.0;
+    
+    let (spawn_vx, spawn_vy, spawn_vw, spawn_vh) = match temp_rotation as i32 % 360 {
+        0 | 180 => (spawn_pos.0, spawn_pos.1, width, height),
+        90 | 270 => {
+            let visual_width = height;
+            let visual_height = width;
+            let visual_x = center_x - visual_width / 2.0;
+            let visual_y = center_y - visual_height / 2.0;
+            (visual_x, visual_y, visual_width, visual_height)
+        },
+        _ => (spawn_pos.0, spawn_pos.1, width, height)
+    };
+
+    let spawn_visual_center = (spawn_vx + spawn_vw / 2.0, spawn_vy + spawn_vh / 2.0);
 
     for vehicle in vehicles
         .iter()
         .filter(|v| v.direction == direction && v.route == route)
     {
-        let other_center = vehicle.get_center();
-        let (other_eff_width, other_eff_height) = vehicle.get_effective_dimensions();
+        let other_visual_center = vehicle.get_visual_center();
+        let (_, _, other_vw, other_vh) = vehicle.get_visual_bounds();
 
-        // Calculate distance between vehicles
+        // Calculate distance between visual bounds
         let distance = match direction {
             Direction::North => {
-                // Cars move UP (y decreasing)
-                if other_center.1 < spawn_center.1 {
-                    spawn_center.1 - other_center.1 - (eff_height / 2.0 + other_eff_height / 2.0)
+                if other_visual_center.1 < spawn_visual_center.1 {
+                    spawn_visual_center.1 - other_visual_center.1 - (spawn_vh / 2.0 + other_vh / 2.0)
                 } else {
-                    continue; // Other vehicle is behind spawn position
+                    continue;
                 }
             }
             Direction::South => {
-                // Cars move DOWN (y increasing)
-                if other_center.1 > spawn_center.1 {
-                    other_center.1 - spawn_center.1 - (eff_height / 2.0 + other_eff_height / 2.0)
+                if other_visual_center.1 > spawn_visual_center.1 {
+                    other_visual_center.1 - spawn_visual_center.1 - (spawn_vh / 2.0 + other_vh / 2.0)
                 } else {
                     continue;
                 }
             }
             Direction::East => {
-                // Cars move RIGHT (x increasing)
-                if other_center.0 > spawn_center.0 {
-                    other_center.0 - spawn_center.0 - (eff_width / 2.0 + other_eff_width / 2.0)
+                if other_visual_center.0 > spawn_visual_center.0 {
+                    other_visual_center.0 - spawn_visual_center.0 - (spawn_vw / 2.0 + other_vw / 2.0)
                 } else {
                     continue;
                 }
             }
             Direction::West => {
-                // Cars move LEFT (x decreasing)
-                if other_center.0 < spawn_center.0 {
-                    spawn_center.0 - other_center.0 - (eff_width / 2.0 + other_eff_width / 2.0)
+                if other_visual_center.0 < spawn_visual_center.0 {
+                    spawn_visual_center.0 - other_visual_center.0 - (spawn_vw / 2.0 + other_vw / 2.0)
                 } else {
                     continue;
                 }
@@ -277,7 +285,6 @@ pub fn is_safe_to_spawn(
 
     true
 }
-
 fn spawn_vehicle_for_direction<'a>(
     vehicles: &mut Vec<Vehicle<'a>>,
     texture_creator: &'a sdl2::render::TextureCreator<sdl2::video::WindowContext>,
