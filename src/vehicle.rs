@@ -230,8 +230,12 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn is_in_intersection(&self) -> bool {
-        let center = self.get_center();
-        center.0 >= 350.0 && center.0 <= 650.0 && center.1 >= 350.0 && center.1 <= 650.0
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
+        // Check if any part of visual bounds overlaps intersection
+        let right = vx + vw;
+        let bottom = vy + vh;
+
+        !(right < 350.0 || vx > 650.0 || bottom < 350.0 || vy > 650.0)
     }
 
     pub fn is_in_same_lane(&self, other: &Vehicle) -> bool {
