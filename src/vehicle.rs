@@ -194,7 +194,8 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn distance_to_intersection(&self) -> f32 {
-        let center = self.get_center();
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
+        let center = (vx + vw / 2.0, vy + vh / 2.0);
 
         match self.direction {
             Direction::North => {
