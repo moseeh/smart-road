@@ -182,14 +182,14 @@ impl<'a> Vehicle<'a> {
         (vw, vh)
     }
     pub fn get_front_position(&self) -> (f32, f32) {
-        let center = self.get_center();
-        let (eff_width, eff_height) = self.get_effective_dimensions();
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
+        let center = (vx + vw / 2.0, vy + vh / 2.0);
 
         match self.direction {
-            Direction::North => (center.0, self.position.1),
-            Direction::South => (center.0, self.position.1 + eff_height),
-            Direction::East => (self.position.0 + eff_width, center.1),
-            Direction::West => (self.position.0, center.1),
+            Direction::North => (center.0, vy),
+            Direction::South => (center.0, vy + vh),
+            Direction::East => (vx + vw, center.1),
+            Direction::West => (vx, center.1),
         }
     }
 
