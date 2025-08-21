@@ -262,8 +262,8 @@ impl<'a> Vehicle<'a> {
             return false;
         }
 
-        let my_center = self.get_center();
-        let other_center = other.get_center();
+        let my_center = self.get_visual_center();
+        let other_center = other.get_visual_center();
 
         match self.direction {
             Direction::North => other_center.1 < my_center.1,
@@ -272,15 +272,14 @@ impl<'a> Vehicle<'a> {
             Direction::West => other_center.0 < my_center.0,
         }
     }
-
     pub fn is_past_intersection(&self) -> bool {
-        let center = self.get_center();
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
 
         match self.direction {
-            Direction::North => center.1 < 350.0, // Past intersection going north
-            Direction::South => center.1 > 650.0, // Past intersection going south
-            Direction::East => center.0 > 650.0,  // Past intersection going east
-            Direction::West => center.0 < 350.0,  // Past intersection going west
+            Direction::North => vy + vh < 350.0, // Entire vehicle past intersection
+            Direction::South => vy > 650.0,
+            Direction::East => vx > 650.0,
+            Direction::West => vx + vw < 350.0,
         }
     }
 
@@ -295,18 +294,21 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn get_safe_following_distance(&self, lead_vehicle: &Vehicle) -> f32 {
-        let my_length = match self.direction {
-            Direction::North | Direction::South => self.height as f32,
-            Direction::East | Direction::West => self.width as f32,
+        let (_, _, _, my_length) = self.get_visual_bounds();
+        let (_, _, _, lead_length) = lead_vehicle.get_visual_bounds();
+
+        // For direction-based length, use visual bounds
+        let my_effective_length = match self.direction {
+            Direction::North | Direction::South => my_length,
+            Direction::East | Direction::West => my_length, // Already correct from visual bounds
         };
 
-        let lead_length = match lead_vehicle.direction {
-            Direction::North | Direction::South => lead_vehicle.height as f32,
-            Direction::East | Direction::West => lead_vehicle.width as f32,
+        let lead_effective_length = match lead_vehicle.direction {
+            Direction::North | Direction::South => lead_length,
+            Direction::East | Direction::West => lead_length,
         };
 
-        // Safe distance = half of each car's length + safety buffer
-        (my_length / 2.0) + (lead_length / 2.0) + self.safety_distance
+        (my_effective_length / 2.0) + (lead_effective_length / 2.0) + self.safety_distance
     }
 
     pub fn should_slow_for_traffic(&self, vehicles: &[Vehicle]) -> Option<Velocity> {
