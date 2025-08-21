@@ -92,6 +92,36 @@ impl<'a> Vehicle<'a> {
             Direction::West => self.position.0 -= pixels_per_frame,
         }
     }
+    pub fn get_visual_bounds(&self) -> (f32, f32, f32, f32) {
+        let center_x = self.position.0 + self.width as f32 / 2.0;
+        let center_y = self.position.1 + self.height as f32 / 2.0;
+
+        match self.rotation as i32 % 360 {
+            0 | 180 => {
+                // No rotation change needed
+                (
+                    self.position.0,
+                    self.position.1,
+                    self.width as f32,
+                    self.height as f32,
+                )
+            }
+            90 | 270 => {
+                // Width/height swap, position adjusts
+                let visual_width = self.height as f32;
+                let visual_height = self.width as f32;
+                let visual_x = center_x - visual_width / 2.0;
+                let visual_y = center_y - visual_height / 2.0;
+                (visual_x, visual_y, visual_width, visual_height)
+            }
+            _ => (
+                self.position.0,
+                self.position.1,
+                self.width as f32,
+                self.height as f32,
+            ),
+        }
+    }
 
     pub fn execute_turn(&mut self) {
         match self.route {
