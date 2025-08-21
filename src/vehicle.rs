@@ -243,9 +243,9 @@ impl<'a> Vehicle<'a> {
             return false;
         }
 
-        let my_center = self.get_center();
-        let other_center = other.get_center();
-        let lane_tolerance = 30.0; // Allow some variance
+        let my_center = self.get_visual_center();
+        let other_center = other.get_visual_center();
+        let lane_tolerance = 30.0;
 
         match self.direction {
             Direction::North | Direction::South => {
