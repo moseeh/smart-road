@@ -172,6 +172,10 @@ impl<'a> Vehicle<'a> {
             self.position.1 + self.height as f32 / 2.0,
         )
     }
+    pub fn get_visual_center(&self) -> (f32, f32) {
+        let (vx, vy, vw, vh) = self.get_visual_bounds();
+        (vx + vw / 2.0, vy + vh / 2.0)
+    }
 
     pub fn get_effective_dimensions(&self) -> (f32, f32) {
         match self.direction {
