@@ -285,8 +285,8 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn distance_to_vehicle(&self, other: &Vehicle) -> f32 {
-        let my_center = self.get_center();
-        let other_center = other.get_center();
+        let my_center = self.get_visual_center();
+        let other_center = other.get_visual_center();
 
         match self.direction {
             Direction::North | Direction::South => (my_center.1 - other_center.1).abs(),
