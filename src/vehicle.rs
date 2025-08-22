@@ -242,19 +242,10 @@ impl<'a> Vehicle<'a> {
         if self.direction != other.direction {
             return false;
         }
-
-        let my_center = self.get_visual_center();
-        let other_center = other.get_visual_center();
-        let lane_tolerance = 30.0;
-
-        match self.direction {
-            Direction::North | Direction::South => {
-                (my_center.0 - other_center.0).abs() < lane_tolerance
-            }
-            Direction::East | Direction::West => {
-                (my_center.1 - other_center.1).abs() < lane_tolerance
-            }
+        if self.route != other.route {
+            return false;
         }
+        true
     }
 
     pub fn is_ahead_of_me(&self, other: &Vehicle) -> bool {
