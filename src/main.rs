@@ -9,8 +9,7 @@ mod velocities;
 
 use intersection::*;
 use route::*;
-use vehicle::Vehicle;
-use velocities::Velocity;
+
 
 // Constants for the game design
 const WINDOW_WIDTH: u32 = 1000;
