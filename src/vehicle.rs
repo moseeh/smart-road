@@ -319,9 +319,9 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn is_outside_canvas(&self) -> bool {
-        self.position.0 < -100.0
-            || self.position.0 > 1100.0
-            || self.position.1 < -100.0
-            || self.position.1 > 1100.0
+        self.position.0 < 0.0
+            || self.position.0 > 1000.0
+            || self.position.1 < 0.0
+            || self.position.1 > 1000.0
     }
 }
