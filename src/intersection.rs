@@ -601,7 +601,7 @@ impl<'a> SmartIntersection<'a> {
         }
     }
 
-    /// Try to get intersection permission using vehicle data instead of reference
+    /// Try to get intersection permission using vehicle data
     fn try_intersection_request_by_data(
         &mut self,
         vehicle_id: usize,
