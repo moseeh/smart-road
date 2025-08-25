@@ -285,21 +285,7 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn get_safe_following_distance(&self, lead_vehicle: &Vehicle) -> f32 {
-        let (_, _, _, my_length) = self.get_visual_bounds();
-        let (_, _, _, lead_length) = lead_vehicle.get_visual_bounds();
-
-        // For direction-based length, use visual bounds
-        let my_effective_length = match self.direction {
-            Direction::North | Direction::South => my_length,
-            Direction::East | Direction::West => my_length, // Already correct from visual bounds
-        };
-
-        let lead_effective_length = match lead_vehicle.direction {
-            Direction::North | Direction::South => lead_length,
-            Direction::East | Direction::West => lead_length,
-        };
-
-        (my_effective_length / 2.0) + (lead_effective_length / 2.0) + self.safety_distance
+        70.0 + self.safety_distance
     }
 
     pub fn should_slow_for_traffic(&self, vehicles: &[Vehicle]) -> Option<Velocity> {
