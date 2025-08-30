@@ -42,12 +42,34 @@ The intersection is divided into a grid of cells (configurable zone size). Vehic
 - SDL2 development libraries
 - SDL2_image library
 
-### Dependencies
-Add to your `Cargo.toml`:
-```toml
-[dependencies]
-sdl2 = { version = "0.35", features = ["image"] }
-rand = "0.8"
+#### Installing SDL2 on Different Platforms
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install libsdl2-dev libsdl2-image-dev
+```
+
+**macOS (with Homebrew):**
+```bash
+brew install sdl2 sdl2_image
+```
+
+**Windows:**
+- Download SDL2 development libraries from [libsdl.org](https://www.libsdl.org/download-2.0.php)
+- Extract and follow SDL2 Rust setup instructions
+
+### Installation Steps
+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/moseeh/smart-road
+cd smart-road-intersection
+```
+
+2. **Build and run:**
+```bash
+cargo build --release
+cargo run
 ```
 
 ### Asset Requirements
