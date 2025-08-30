@@ -242,19 +242,10 @@ impl<'a> Vehicle<'a> {
         if self.direction != other.direction {
             return false;
         }
-
-        let my_center = self.get_visual_center();
-        let other_center = other.get_visual_center();
-        let lane_tolerance = 30.0;
-
-        match self.direction {
-            Direction::North | Direction::South => {
-                (my_center.0 - other_center.0).abs() < lane_tolerance
-            }
-            Direction::East | Direction::West => {
-                (my_center.1 - other_center.1).abs() < lane_tolerance
-            }
+        if self.route != other.route {
+            return false;
         }
+        true
     }
 
     pub fn is_ahead_of_me(&self, other: &Vehicle) -> bool {
@@ -294,21 +285,7 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn get_safe_following_distance(&self, lead_vehicle: &Vehicle) -> f32 {
-        let (_, _, _, my_length) = self.get_visual_bounds();
-        let (_, _, _, lead_length) = lead_vehicle.get_visual_bounds();
-
-        // For direction-based length, use visual bounds
-        let my_effective_length = match self.direction {
-            Direction::North | Direction::South => my_length,
-            Direction::East | Direction::West => my_length, // Already correct from visual bounds
-        };
-
-        let lead_effective_length = match lead_vehicle.direction {
-            Direction::North | Direction::South => lead_length,
-            Direction::East | Direction::West => lead_length,
-        };
-
-        (my_effective_length / 2.0) + (lead_effective_length / 2.0) + self.safety_distance
+        70.0 + self.safety_distance
     }
 
     pub fn should_slow_for_traffic(&self, vehicles: &[Vehicle]) -> Option<Velocity> {
@@ -342,9 +319,9 @@ impl<'a> Vehicle<'a> {
     }
 
     pub fn is_outside_canvas(&self) -> bool {
-        self.position.0 < -100.0
-            || self.position.0 > 1100.0
-            || self.position.1 < -100.0
-            || self.position.1 > 1100.0
+        self.position.0 < 0.0
+            || self.position.0 > 1000.0
+            || self.position.1 < 0.0
+            || self.position.1 > 1000.0
     }
 }
