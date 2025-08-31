@@ -878,6 +878,7 @@ impl<'a> SmartIntersection<'a> {
             Velocity::Slow => 3.0,
             Velocity::Medium => 5.0,
             Velocity::Fast => 7.0,
+            Velocity::Stopped => 0.0,
         };
 
         if vehicle_max_speed > self.max_velocity_recorded {
