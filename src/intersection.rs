@@ -698,6 +698,7 @@ impl<'a> SmartIntersection<'a> {
             Velocity::Slow => 3.0,
             Velocity::Medium => 5.0,
             Velocity::Fast => 7.0,
+            Velocity::Stopped => return 0.0,
         };
 
         distance / speed_pixels_per_frame / 60.0 // Convert to seconds
