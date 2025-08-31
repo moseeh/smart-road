@@ -1,13 +1,13 @@
 use rand::Rng;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Route {
     Right,
     Left,
     Straight,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
     North, // Coming from south, going north
     South, // Coming from north, going south
