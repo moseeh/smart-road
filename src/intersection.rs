@@ -494,18 +494,58 @@ impl<'a> SmartIntersection<'a> {
             } else if is_in_intersection {
                 Velocity::Fast
             } else if !requested_intersection || !intersection_permission {
-                // Try to get intersection permission using two-path system
-                let (permission, recommended_speed) = self.try_two_path_intersection_request(
-                    vehicle_id,
-                    vehicle_route,
-                    vehicle_direction,
-                    vehicle_speed,
-                    current_time,
-                    distance_to_intersection,
-                );
-                requested_intersection = true;
-                intersection_permission = permission;
-                recommended_speed
+                // Check if vehicle should stop at intersection entrance
+                if distance_to_intersection <= 10.0 && !intersection_permission {
+                    // Vehicle is at intersection entrance and was previously denied
+                    // Keep trying with fast speed while stopped
+                    let (permission, recommended_speed) = self.try_two_path_intersection_request(
+                        vehicle_id,
+                        vehicle_route,
+                        vehicle_direction,
+                        Velocity::Fast, // Always try with fast speed when stopped
+                        current_time,
+                        distance_to_intersection,
+                    );
+                    requested_intersection = true;
+                    intersection_permission = permission;
+
+                    if permission {
+                        println!(
+                            "✅ Vehicle {} got permission after waiting - resuming at fast speed",
+                            vehicle_id
+                        );
+                        Velocity::Fast
+                    } else {
+                        println!(
+                            "🛑 Vehicle {} still waiting at intersection entrance",
+                            vehicle_id
+                        );
+                        Velocity::Stopped
+                    }
+                } else {
+                    // Normal intersection request with adaptive speed
+                    let (permission, recommended_speed) = self.try_two_path_intersection_request(
+                        vehicle_id,
+                        vehicle_route,
+                        vehicle_direction,
+                        vehicle_speed,
+                        current_time,
+                        distance_to_intersection,
+                    );
+                    requested_intersection = true;
+                    intersection_permission = permission;
+
+                    if !permission && distance_to_intersection <= 15.0 {
+                        // Close to intersection but denied - stop the vehicle
+                        println!(
+                            "🛑 Vehicle {} denied permission - stopping at intersection entrance",
+                            vehicle_id
+                        );
+                        Velocity::Stopped
+                    } else {
+                        recommended_speed
+                    }
+                }
             } else {
                 Velocity::Fast
             };
@@ -515,6 +555,7 @@ impl<'a> SmartIntersection<'a> {
                 Velocity::Fast
             } else {
                 match (traffic_speed, intersection_speed) {
+                    (Velocity::Stopped, _) | (_, Velocity::Stopped) => Velocity::Stopped, // NEW: Stop overrides everything
                     (Velocity::Slow, _) | (_, Velocity::Slow) => Velocity::Slow,
                     (Velocity::Medium, _) | (_, Velocity::Medium) => Velocity::Medium,
                     (Velocity::Fast, Velocity::Fast) => Velocity::Fast,
