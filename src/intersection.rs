@@ -423,7 +423,7 @@ impl<'a> SmartIntersection<'a> {
 
     /// Updated vehicle management with two-path system
     fn update_vehicles_with_two_path_system(&mut self, current_time: f32) {
-        // Calculate traffic speeds 
+        // Calculate traffic speeds
         let mut target_speeds = Vec::with_capacity(self.active_vehicles.len());
 
         for i in 0..self.active_vehicles.len() {
@@ -595,6 +595,7 @@ impl<'a> SmartIntersection<'a> {
             Velocity::Fast => vec![Velocity::Fast, Velocity::Medium, Velocity::Slow],
             Velocity::Medium => vec![Velocity::Medium, Velocity::Slow],
             Velocity::Slow => vec![Velocity::Slow],
+            Velocity::Stopped => vec![Velocity::Fast],
         };
 
         for attempt_speed in speeds_to_try {
