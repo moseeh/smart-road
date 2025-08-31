@@ -599,6 +599,9 @@ impl<'a> SmartIntersection<'a> {
         };
 
         for attempt_speed in speeds_to_try {
+            if let Some(vehicle) = self.active_vehicles.iter_mut().find(|v| v.id == vehicle_id) {
+                vehicle.current_speed = attempt_speed;
+            }
             // Calculate timing for segment 1
             let time_to_intersection =
                 self.calculate_time_with_speed(distance_to_intersection, attempt_speed);
