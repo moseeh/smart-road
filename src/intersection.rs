@@ -653,8 +653,14 @@ impl<'a> SmartIntersection<'a> {
             return (true, attempt_speed);
         }
 
-        println!("❌ Vehicle {} denied permission at all speeds", vehicle_id);
-        (false, Velocity::Slow)
+        if let Some(vehicle) = self.active_vehicles.iter_mut().find(|v| v.id == vehicle_id) {
+            vehicle.current_speed = Velocity::Stopped;
+            println!(
+                "🛑 Vehicle {} STOPPED at intersection entrance - waiting for clearance",
+                vehicle_id
+            );
+        }
+        (false, Velocity::Stopped)
     }
 
     /// Check if cells can be reserved (without actually reserving them)
