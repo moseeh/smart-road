@@ -47,8 +47,8 @@ pub struct SmartIntersection<'a> {
 
 impl<'a> SmartIntersection<'a> {
     pub fn new() -> Self {
-        let zone_px = 15;
-        let cols = (300 / zone_px) as usize;
+        let zone_px = 10;
+        let cols = 300 / zone_px;
         let rows = cols;
         Self {
             active_vehicles: Vec::new(),
