@@ -284,7 +284,7 @@ impl<'a> Vehicle<'a> {
         }
     }
 
-    pub fn get_safe_following_distance(&self, lead_vehicle: &Vehicle) -> f32 {
+    pub fn get_safe_following_distance(&self, _lead_vehicle: &Vehicle) -> f32 {
         70.0 + self.safety_distance
     }
 
