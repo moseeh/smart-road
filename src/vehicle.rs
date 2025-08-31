@@ -68,6 +68,7 @@ impl<'a> Vehicle<'a> {
             Velocity::Slow => 3.0,   // 3 pixel per frame
             Velocity::Medium => 5.0, // 5 pixels per frame
             Velocity::Fast => 7.0,   // 7 pixels per frame
+            Velocity::Stopped => 0.0, // vehicle doesnt move
         };
 
         if !self.has_turned {
