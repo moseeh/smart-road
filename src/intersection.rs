@@ -950,6 +950,9 @@ impl<'a> SmartIntersection<'a> {
 
     fn detect_close_calls(&mut self, vehicle_index: usize) {
         let current_vehicle = &self.active_vehicles[vehicle_index];
+        if !current_vehicle.is_in_intersection() {
+            return;
+        }
 
         for (j, other_vehicle) in self.active_vehicles.iter().enumerate() {
             if vehicle_index == j {
