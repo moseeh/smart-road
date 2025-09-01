@@ -10,7 +10,6 @@ mod velocities;
 use intersection::*;
 use route::*;
 
-
 // Constants for the game design
 const WINDOW_WIDTH: u32 = 1000;
 const WINDOW_HEIGHT: u32 = 1000;
@@ -67,15 +66,25 @@ fn main() -> Result<(), String> {
                 Event::KeyDown {
                     keycode: Some(key), ..
                 } => {
-                    let direction = match key {
-                        Keycode::Up => Some(Direction::North),
-                        Keycode::Down => Some(Direction::South),
-                        Keycode::Right => Some(Direction::East),
-                        Keycode::Left => Some(Direction::West),
-                        Keycode::R => None, // Random direction
-                        _ => continue,
-                    };
-                    intersection.spawn_vehicle(&texture_creator, direction);
+                    match key {
+                        // Direction-specific spawning
+                        Keycode::Up => {
+                            intersection.spawn_vehicle(&texture_creator, Some(Direction::North));
+                        }
+                        Keycode::Down => {
+                            intersection.spawn_vehicle(&texture_creator, Some(Direction::South));
+                        }
+                        Keycode::Right => {
+                            intersection.spawn_vehicle(&texture_creator, Some(Direction::East));
+                        }
+                        Keycode::Left => {
+                            intersection.spawn_vehicle(&texture_creator, Some(Direction::West));
+                        }
+                        Keycode::R => {
+                            intersection.spawn_vehicle(&texture_creator, None); // Random direction
+                        }
+                        _ => {}
+                    }
                 }
                 _ => {}
             }

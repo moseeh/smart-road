@@ -1,11 +1,13 @@
+use crate::route::{
+    Direction, Route, get_random_direction, get_random_route, get_spawn_position, get_turn_position,
+};
 use crate::vehicle::Vehicle;
 use crate::velocities::Velocity;
-use crate::route::{Direction, Route, get_random_direction, get_random_route, get_spawn_position, get_turn_position};
 use sdl2::render::TextureCreator;
 use sdl2::video::WindowContext;
+use std::collections::HashMap;
 
-/// Intersection geometry on your 1000x1000 canvas:
-/// 300x300 centered square => [350,650] x [350,650]
+/// Intersection geometry
 const IX_MIN: f32 = 350.0;
 const IY_MIN: f32 = 350.0;
 const IX_MAX: f32 = 650.0;
@@ -13,15 +15,30 @@ const IY_MAX: f32 = 650.0;
 
 #[derive(Clone)]
 struct TimeSlot {
-    start: f32,        // when the car enters this cell
-    end: f32,          // when the car leaves this cell
-    vehicle_id: usize, // index in active_vehicles
+    start: f32,
+    end: f32,
+    vehicle_id: usize,
 }
 
 #[derive(Clone)]
 struct Cell {
-    slots: Vec<TimeSlot>, // reservations in chronological order
+    slots: Vec<TimeSlot>,
 }
+
+/// Memoized path data for each direction+route combination
+#[derive(Clone, Debug)]
+struct PathSegment {
+    cells: Vec<(usize, usize)>,
+    distance: f32,
+}
+
+#[derive(Clone, Debug)]
+struct VehiclePath {
+    segment1: PathSegment, // Entry to turn position (or full path for straight)
+    segment2: Option<PathSegment>, // Turn position to exit (None for straight)
+}
+
+type PathCache = HashMap<(Direction, Route), VehiclePath>;
 
 pub struct SmartIntersection<'a> {
     pub active_vehicles: Vec<Vehicle<'a>>,
@@ -32,7 +49,10 @@ pub struct SmartIntersection<'a> {
     rows: usize,
     grid: Vec<Cell>, // flattened rows*cols
 
-    // --- stats ---
+    // Memoized path calculations
+    path_cache: PathCache,
+
+    // Stats
     pub total_vehicles_passed: u32,
     pub max_velocity_recorded: f32,
     pub min_velocity_recorded: f32,
@@ -40,22 +60,24 @@ pub struct SmartIntersection<'a> {
     pub min_time_in_intersection: f32,
     pub close_calls: u32,
     pub is_running: bool,
+    pub close_call_pairs_this_frame: std::collections::HashSet<(usize, usize)>,
 
-    // --- tracking data ---
-    vehicle_intersection_times: std::collections::HashMap<usize, f32>, // vehicle_id -> entry_time
+    vehicle_intersection_times: HashMap<usize, f32>,
 }
 
 impl<'a> SmartIntersection<'a> {
     pub fn new() -> Self {
-        let zone_px = 15;
-        let cols = (300 / zone_px) as usize;
+        let zone_px = 10;
+        let cols = 300 / zone_px;
         let rows = cols;
-        Self {
+
+        let mut intersection = Self {
             active_vehicles: Vec::new(),
-            zone_px,
+            zone_px: zone_px as u32,
             cols,
             rows,
             grid: vec![Cell { slots: Vec::new() }; cols * rows],
+            path_cache: HashMap::new(),
             total_vehicles_passed: 0,
             max_velocity_recorded: 0.0,
             min_velocity_recorded: f32::MAX,
@@ -63,16 +85,317 @@ impl<'a> SmartIntersection<'a> {
             min_time_in_intersection: f32::MAX,
             close_calls: 0,
             is_running: true,
-            vehicle_intersection_times: std::collections::HashMap::new(),
+            close_call_pairs_this_frame: std::collections::HashSet::new(),
+            vehicle_intersection_times: HashMap::new(),
+        };
+
+        // Pre-calculate all possible paths
+        intersection.initialize_path_cache();
+        intersection
+    }
+
+    /// Pre-calculate all possible vehicle paths for memoization
+    fn initialize_path_cache(&mut self) {
+        let directions = [
+            Direction::North,
+            Direction::South,
+            Direction::East,
+            Direction::West,
+        ];
+        let routes = [Route::Straight, Route::Left, Route::Right];
+
+        for &direction in &directions {
+            for &route in &routes {
+                let path = self.calculate_vehicle_path(direction, route);
+                self.path_cache.insert((direction, route), path); // This now works because path implements Clone
+            }
         }
     }
 
-    /// Main update function - handles all vehicle management
-    pub fn update(&mut self, current_time: f32) {
-        // Update all vehicles with smart intersection management
-        self.update_vehicles_with_intersection(current_time);
+    /// Calculate the complete path for a vehicle (called during initialization)
+    fn calculate_vehicle_path(&self, direction: Direction, route: Route) -> VehiclePath {
+        match route {
+            Route::Straight => {
+                let cells = self.calculate_straight_path_cells(direction);
+                let distance = self.calculate_straight_path_distance(direction);
 
-        // Remove vehicles that have left the canvas and update stats
+                VehiclePath {
+                    segment1: PathSegment { cells, distance },
+                    segment2: None,
+                }
+            }
+            Route::Right | Route::Left => {
+                let turn_pos = get_turn_position(direction, route);
+                let (segment1_cells, segment1_distance) =
+                    self.calculate_path_to_turn(direction, route, turn_pos);
+                let (segment2_cells, segment2_distance) =
+                    self.calculate_path_from_turn(direction, route, turn_pos);
+
+                VehiclePath {
+                    segment1: PathSegment {
+                        cells: segment1_cells,
+                        distance: segment1_distance,
+                    },
+                    segment2: Some(PathSegment {
+                        cells: segment2_cells,
+                        distance: segment2_distance,
+                    }),
+                }
+            }
+        }
+    }
+
+    /// Calculate straight path cells
+    fn calculate_straight_path_cells(&self, direction: Direction) -> Vec<(usize, usize)> {
+        let mut cells = Vec::new();
+
+        match direction {
+            Direction::North => {
+                // Northbound straight: lanes around x=550 (cols 20-24)
+                for row in 0..self.rows {
+                    for col in 20..25 {
+                        if col < self.cols {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+            }
+            Direction::South => {
+                // Southbound straight: lanes around x=400 (cols 5-9)
+                for row in 0..self.rows {
+                    for col in 5..10 {
+                        if col < self.cols {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+            }
+            Direction::East => {
+                // Eastbound straight: lanes around y=550 (rows 20-24)
+                for col in 0..self.cols {
+                    for row in 20..25 {
+                        if row < self.rows {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+            }
+            Direction::West => {
+                // Westbound straight: lanes around y=400 (rows 5-9)
+                for col in 0..self.cols {
+                    for row in 5..10 {
+                        if row < self.rows {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+            }
+        }
+
+        cells
+    }
+
+    /// Calculate distance for straight path through intersection
+    fn calculate_straight_path_distance(&self, _direction: Direction) -> f32 {
+        300.0 // Intersection is 300px across
+    }
+
+    /// Calculate path from entry to turn position
+    fn calculate_path_to_turn(
+        &self,
+        direction: Direction,
+        route: Route,
+        turn_pos: (f32, f32),
+    ) -> (Vec<(usize, usize)>, f32) {
+        let mut cells = Vec::new();
+
+        match direction {
+            Direction::North => {
+                let cols = if route == Route::Left { 15..20 } else { 25..30 }; // Left or right lane
+                let entry_y = 650.0;
+                let turn_y = turn_pos.1;
+                let distance = entry_y - turn_y;
+
+                let start_row = ((turn_y - IY_MIN) / self.zone_px as f32) as usize;
+                let end_row = ((entry_y - IY_MIN) / self.zone_px as f32) as usize;
+
+                for row in start_row..=end_row.min(self.rows - 1) {
+                    for col in cols.clone() {
+                        if col < self.cols {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+
+                (cells, distance)
+            }
+            Direction::South => {
+                let cols = if route == Route::Left { 10..15 } else { 0..5 }; // Left or right lane
+                let entry_y = 350.0;
+                let turn_y = turn_pos.1;
+                let distance = turn_y - entry_y;
+
+                let start_row = ((entry_y - IY_MIN) / self.zone_px as f32) as usize;
+                let end_row = ((turn_y - IY_MIN) / self.zone_px as f32) as usize;
+
+                for row in start_row..=end_row.min(self.rows - 1) {
+                    for col in cols.clone() {
+                        if col < self.cols {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+
+                (cells, distance)
+            }
+            Direction::East => {
+                let rows = if route == Route::Left { 15..20 } else { 25..30 }; // Left or right lane
+                let entry_x = 350.0;
+                let turn_x = turn_pos.0;
+                let distance = turn_x - entry_x;
+
+                let start_col = ((entry_x - IX_MIN) / self.zone_px as f32) as usize;
+                let end_col = ((turn_x - IX_MIN) / self.zone_px as f32) as usize;
+
+                for col in start_col..=end_col.min(self.cols - 1) {
+                    for row in rows.clone() {
+                        if row < self.rows {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+
+                (cells, distance)
+            }
+            Direction::West => {
+                let rows = if route == Route::Left { 10..15 } else { 0..5 }; // Left or right lane
+                let entry_x = 650.0;
+                let turn_x = turn_pos.0;
+                let distance = entry_x - turn_x;
+
+                let start_col = ((turn_x - IX_MIN) / self.zone_px as f32) as usize;
+                let end_col = ((entry_x - IX_MIN) / self.zone_px as f32) as usize;
+
+                for col in start_col..=end_col.min(self.cols - 1) {
+                    for row in rows.clone() {
+                        if row < self.rows {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+
+                (cells, distance)
+            }
+        }
+    }
+
+    /// Calculate path from turn position to exit
+    fn calculate_path_from_turn(
+        &self,
+        direction: Direction,
+        route: Route,
+        turn_pos: (f32, f32),
+    ) -> (Vec<(usize, usize)>, f32) {
+        let mut cells = Vec::new();
+
+        // After turning, vehicle changes direction
+        let new_direction = match (direction, route) {
+            (Direction::North, Route::Right) => Direction::East,
+            (Direction::North, Route::Left) => Direction::West,
+            (Direction::South, Route::Right) => Direction::West,
+            (Direction::South, Route::Left) => Direction::East,
+            (Direction::East, Route::Right) => Direction::South,
+            (Direction::East, Route::Left) => Direction::North,
+            (Direction::West, Route::Right) => Direction::North,
+            (Direction::West, Route::Left) => Direction::South,
+            _ => direction, // Should not happen for turns
+        };
+
+        match new_direction {
+            Direction::North => {
+                let exit_y = 350.0;
+                let turn_y = turn_pos.1;
+                let distance = turn_y - exit_y;
+
+                let cols = 15..20; // After-turn lane width
+                let start_row = ((exit_y - IY_MIN) / self.zone_px as f32) as usize;
+                let end_row = ((turn_y - IY_MIN) / self.zone_px as f32) as usize;
+
+                for row in start_row..=end_row.min(self.rows - 1) {
+                    for col in cols.clone() {
+                        if col < self.cols {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+
+                (cells, distance)
+            }
+            Direction::South => {
+                let exit_y = 650.0;
+                let turn_y = turn_pos.1;
+                let distance = exit_y - turn_y;
+
+                let cols = 10..15; // After-turn lane width
+                let start_row = ((turn_y - IY_MIN) / self.zone_px as f32) as usize;
+                let end_row = ((exit_y - IY_MIN) / self.zone_px as f32) as usize;
+
+                for row in start_row..=end_row.min(self.rows - 1) {
+                    for col in cols.clone() {
+                        if col < self.cols {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+
+                (cells, distance)
+            }
+            Direction::East => {
+                let exit_x = 650.0;
+                let turn_x = turn_pos.0;
+                let distance = exit_x - turn_x;
+
+                let rows = 10..15; // After-turn lane width
+                let start_col = ((turn_x - IX_MIN) / self.zone_px as f32) as usize;
+                let end_col = ((exit_x - IX_MIN) / self.zone_px as f32) as usize;
+
+                for col in start_col..=end_col.min(self.cols - 1) {
+                    for row in rows.clone() {
+                        if row < self.rows {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+
+                (cells, distance)
+            }
+            Direction::West => {
+                let exit_x = 350.0;
+                let turn_x = turn_pos.0;
+                let distance = turn_x - exit_x;
+
+                let rows = 15..20; // After-turn lane width
+                let start_col = ((exit_x - IX_MIN) / self.zone_px as f32) as usize;
+                let end_col = ((turn_x - IX_MIN) / self.zone_px as f32) as usize;
+
+                for col in start_col..=end_col.min(self.cols - 1) {
+                    for row in rows.clone() {
+                        if row < self.rows {
+                            cells.push((col, row));
+                        }
+                    }
+                }
+
+                (cells, distance)
+            }
+        }
+    }
+
+    /// Main update function
+    pub fn update(&mut self, current_time: f32) {
+        self.update_vehicles_with_two_path_system(current_time);
+
+        // Remove vehicles that left canvas
         let mut vehicles_to_remove = Vec::new();
         for (i, vehicle) in self.active_vehicles.iter().enumerate() {
             if vehicle.is_outside_canvas() {
@@ -80,17 +403,397 @@ impl<'a> SmartIntersection<'a> {
             }
         }
 
-        // Remove vehicles in reverse order to maintain indices and update stats
         for &(i, vehicle_id, current_speed) in vehicles_to_remove.iter().rev() {
             self.active_vehicles.remove(i);
             self.update_stats_for_exiting_vehicle_by_data(vehicle_id, current_speed, current_time);
         }
 
-        // Track intersection entry/exit times
         self.track_intersection_times(current_time);
     }
 
-    /// Spawn a new vehicle if safe
+    /// Updated vehicle management with two-path system
+    fn update_vehicles_with_two_path_system(&mut self, current_time: f32) {
+        // Calculate traffic speeds
+        let mut target_speeds = Vec::with_capacity(self.active_vehicles.len());
+
+        for i in 0..self.active_vehicles.len() {
+            let current_vehicle = &self.active_vehicles[i];
+
+            if current_vehicle.is_past_intersection() {
+                target_speeds.push(Velocity::Fast);
+                continue;
+            }
+
+            let mut target_speed = Velocity::Fast;
+            let mut closest_distance = f32::MAX;
+            let mut required_distance = 0.0;
+
+            for (j, other_vehicle) in self.active_vehicles.iter().enumerate() {
+                if i == j {
+                    continue;
+                }
+
+                if current_vehicle.is_ahead_of_me(other_vehicle) {
+                    let distance = current_vehicle.distance_to_vehicle(other_vehicle);
+                    if distance < closest_distance {
+                        closest_distance = distance;
+                        required_distance =
+                            current_vehicle.get_safe_following_distance(other_vehicle);
+                    }
+                }
+            }
+
+            if closest_distance != f32::MAX && closest_distance < required_distance {
+                if closest_distance < required_distance * 0.7 {
+                    target_speed = Velocity::Stopped
+                } else if closest_distance < required_distance * 0.8 {
+                    target_speed = Velocity::Medium;
+                }
+            }
+
+            target_speeds.push(target_speed);
+        }
+
+        // Process intersection requests with two-path system
+        let mut vehicle_updates = Vec::new();
+
+        for i in 0..self.active_vehicles.len() {
+            let vehicle = &self.active_vehicles[i];
+            let vehicle_id = vehicle.id;
+            let distance_to_intersection = vehicle.distance_to_intersection();
+            let is_past_intersection = vehicle.is_past_intersection();
+            let is_in_intersection = vehicle.is_in_intersection();
+            let mut requested_intersection = vehicle.requested_intersection;
+            let mut intersection_permission = vehicle.intersection_permission;
+            let vehicle_route = vehicle.route;
+            let vehicle_direction = vehicle.direction;
+            let vehicle_speed = vehicle.current_speed;
+            let (vx, vy, vw, vh) = vehicle.get_visual_bounds();
+            let traffic_speed = target_speeds[i];
+
+            // Reset intersection status if far away
+            if distance_to_intersection > 150.0 {
+                requested_intersection = false;
+                intersection_permission = false;
+            }
+
+            let intersection_speed = if is_past_intersection {
+                Velocity::Fast
+            } else if distance_to_intersection > 60.0 {
+                Velocity::Fast
+            } else if is_in_intersection {
+                Velocity::Fast
+            } else if !requested_intersection || !intersection_permission {
+                // Check if vehicle should stop at intersection entrance
+                if distance_to_intersection <= 10.0 && !intersection_permission {
+                    // Vehicle is at intersection entrance and was previously denied
+                    // Keep trying with fast speed while stopped
+                    let (permission, _recommended_speed) = self.try_two_path_intersection_request(
+                        vehicle_id,
+                        vehicle_route,
+                        vehicle_direction,
+                        Velocity::Fast, // Always try with fast speed when stopped
+                        current_time,
+                        distance_to_intersection,
+                    );
+                    requested_intersection = true;
+                    intersection_permission = permission;
+
+                    if permission {
+                        Velocity::Fast
+                    } else {
+                        Velocity::Stopped
+                    }
+                } else {
+                    // Normal intersection request with adaptive speed
+                    let (permission, recommended_speed) = self.try_two_path_intersection_request(
+                        vehicle_id,
+                        vehicle_route,
+                        vehicle_direction,
+                        vehicle_speed,
+                        current_time,
+                        distance_to_intersection,
+                    );
+                    requested_intersection = true;
+                    intersection_permission = permission;
+
+                    if !permission && distance_to_intersection <= 15.0 {
+                        // Close to intersection but denied - stop the vehicle
+                        Velocity::Stopped
+                    } else {
+                        recommended_speed
+                    }
+                }
+            } else {
+                Velocity::Fast
+            };
+
+            // Determine final speed
+            let final_speed = if is_past_intersection {
+                Velocity::Fast
+            } else {
+                match (traffic_speed, intersection_speed) {
+                    (Velocity::Stopped, _) | (_, Velocity::Stopped) => Velocity::Stopped, // NEW: Stop overrides everything
+                    (Velocity::Slow, _) | (_, Velocity::Slow) => Velocity::Slow,
+                    (Velocity::Medium, _) | (_, Velocity::Medium) => Velocity::Medium,
+                    (Velocity::Fast, Velocity::Fast) => Velocity::Fast,
+                }
+            };
+
+            // Calculate cells to release
+            let cells_to_release = if is_in_intersection || distance_to_intersection < 50.0 {
+                self.calculate_cells_to_release_two_path(
+                    vehicle_direction,
+                    vehicle_route,
+                    vx,
+                    vy,
+                    vw,
+                    vh,
+                )
+            } else {
+                Vec::new()
+            };
+
+            vehicle_updates.push((
+                i,
+                final_speed,
+                requested_intersection,
+                intersection_permission,
+                cells_to_release,
+                vehicle_id,
+            ));
+        }
+
+        // Apply updates
+        for (
+            i,
+            final_speed,
+            requested_intersection,
+            intersection_permission,
+            cells_to_release,
+            vehicle_id,
+        ) in vehicle_updates
+        {
+            let vehicle = &mut self.active_vehicles[i];
+
+            vehicle.current_speed = final_speed;
+            vehicle.requested_intersection = requested_intersection;
+            vehicle.intersection_permission = intersection_permission;
+
+            vehicle.update();
+
+            if !cells_to_release.is_empty() {
+                self.release_specific_cells(&cells_to_release, vehicle_id);
+            }
+
+            self.detect_close_calls(i);
+        }
+    }
+
+    /// Try intersection request with two-path system and adaptive speed
+    fn try_two_path_intersection_request(
+        &mut self,
+        vehicle_id: usize,
+        route: Route,
+        direction: Direction,
+        current_speed: Velocity,
+        current_time: f32,
+        distance_to_intersection: f32,
+    ) -> (bool, Velocity) {
+        // Get cached path for this direction+route combination
+        let path = match self.path_cache.get(&(direction, route)) {
+            Some(p) => p.clone(),
+            None => {
+                return (false, Velocity::Slow);
+            }
+        };
+
+        // Try different speeds until we get permission
+        let speeds_to_try = match current_speed {
+            Velocity::Fast => vec![Velocity::Fast, Velocity::Medium, Velocity::Slow],
+            Velocity::Medium => vec![Velocity::Medium, Velocity::Slow],
+            Velocity::Slow => vec![Velocity::Slow],
+            Velocity::Stopped => vec![Velocity::Fast],
+        };
+
+        for attempt_speed in speeds_to_try {
+            if let Some(vehicle) = self.active_vehicles.iter_mut().find(|v| v.id == vehicle_id) {
+                vehicle.current_speed = attempt_speed;
+            }
+            // Calculate timing for segment 1
+            let time_to_intersection =
+                self.calculate_time_with_speed(distance_to_intersection, attempt_speed);
+            let segment1_time =
+                self.calculate_time_with_speed(path.segment1.distance, attempt_speed);
+
+            let segment1_entry = current_time + time_to_intersection;
+            let segment1_exit = segment1_entry + segment1_time;
+
+            // Try to reserve segment 1
+            if !self.can_reserve_cells(&path.segment1.cells, segment1_entry, segment1_exit) {
+                continue; // Try slower speed
+            }
+
+            // If there's a second segment (turning vehicles), check that too
+            let mut segment2_exit = segment1_exit;
+            if let Some(ref segment2) = path.segment2 {
+                let segment2_time =
+                    self.calculate_time_with_speed(segment2.distance, attempt_speed);
+                segment2_exit = segment1_exit + segment2_time;
+
+                if !self.can_reserve_cells(&segment2.cells, segment1_exit, segment2_exit) {
+                    continue; // Try slower speed
+                }
+            }
+
+            // Both segments can be reserved - make the reservations
+            self.reserve_cells_for_vehicle(
+                vehicle_id,
+                &path.segment1.cells,
+                segment1_entry,
+                segment1_exit,
+            );
+
+            if let Some(ref segment2) = path.segment2 {
+                self.reserve_cells_for_vehicle(
+                    vehicle_id,
+                    &segment2.cells,
+                    segment1_exit,
+                    segment2_exit,
+                );
+            }
+            return (true, attempt_speed);
+        }
+
+        if let Some(vehicle) = self.active_vehicles.iter_mut().find(|v| v.id == vehicle_id) {
+            vehicle.current_speed = Velocity::Stopped;
+        }
+        (false, Velocity::Stopped)
+    }
+
+    /// Check if cells can be reserved (without actually reserving them)
+    fn can_reserve_cells(&self, cells: &[(usize, usize)], start_time: f32, end_time: f32) -> bool {
+        for &(col, row) in cells {
+            if col >= self.cols || row >= self.rows {
+                continue;
+            }
+            let idx = self.cell_index(col, row);
+            if self.conflict(&self.grid[idx], start_time, end_time) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Reserve cells for a vehicle
+    fn reserve_cells_for_vehicle(
+        &mut self,
+        vehicle_id: usize,
+        cells: &[(usize, usize)],
+        start_time: f32,
+        end_time: f32,
+    ) {
+        for &(col, row) in cells {
+            if col >= self.cols || row >= self.rows {
+                continue;
+            }
+            let idx = self.cell_index(col, row);
+            self.grid[idx].slots.push(TimeSlot {
+                start: start_time,
+                end: end_time,
+                vehicle_id,
+            });
+        }
+    }
+
+    /// Calculate time with specific speed
+    fn calculate_time_with_speed(&self, distance: f32, speed: Velocity) -> f32 {
+        let speed_pixels_per_frame = match speed {
+            Velocity::Slow => 3.0,
+            Velocity::Medium => 5.0,
+            Velocity::Fast => 7.0,
+            Velocity::Stopped => return 0.0,
+        };
+
+        distance / speed_pixels_per_frame / 60.0 // Convert to seconds
+    }
+
+    /// Calculate cells to release for two-path system
+    fn calculate_cells_to_release_two_path(
+        &self,
+        direction: Direction,
+        route: Route,
+        vx: f32,
+        vy: f32,
+        vw: f32,
+        vh: f32,
+    ) -> Vec<(usize, usize)> {
+        // Use the cached path to determine which cells to release
+        let path = match self.path_cache.get(&(direction, route)) {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+
+        let mut cells_to_release = Vec::new();
+
+        // Release cells behind the vehicle based on its current position
+        match direction {
+            Direction::North => {
+                let behind_y = vy + vh;
+                if behind_y >= IY_MIN && behind_y <= IY_MAX {
+                    let row = ((behind_y - IY_MIN) / self.zone_px as f32) as usize;
+
+                    // Release cells from segment 1 that are behind the vehicle
+                    for &(col, cell_row) in &path.segment1.cells {
+                        if cell_row == row {
+                            cells_to_release.push((col, cell_row));
+                        }
+                    }
+                }
+            }
+            Direction::South => {
+                let behind_y = vy;
+                if behind_y >= IY_MIN && behind_y <= IY_MAX {
+                    let row = ((behind_y - IY_MIN) / self.zone_px as f32) as usize;
+
+                    for &(col, cell_row) in &path.segment1.cells {
+                        if cell_row == row {
+                            cells_to_release.push((col, cell_row));
+                        }
+                    }
+                }
+            }
+            Direction::East => {
+                let behind_x = vx;
+                if behind_x >= IX_MIN && behind_x <= IX_MAX {
+                    let col = ((behind_x - IX_MIN) / self.zone_px as f32) as usize;
+
+                    for &(cell_col, row) in &path.segment1.cells {
+                        if cell_col == col {
+                            cells_to_release.push((cell_col, row));
+                        }
+                    }
+                }
+            }
+            Direction::West => {
+                let behind_x = vx + vw;
+                if behind_x >= IX_MIN && behind_x <= IX_MAX {
+                    let col = ((behind_x - IX_MIN) / self.zone_px as f32) as usize;
+
+                    for &(cell_col, row) in &path.segment1.cells {
+                        if cell_col == col {
+                            cells_to_release.push((cell_col, row));
+                        }
+                    }
+                }
+            }
+        }
+
+        cells_to_release
+    }
+
+    // === UTILITY METHODS ===
+
     pub fn spawn_vehicle(
         &mut self,
         texture_creator: &'a TextureCreator<WindowContext>,
@@ -115,861 +818,166 @@ impl<'a> SmartIntersection<'a> {
         }
     }
 
-    /// Check if it's safe to spawn a vehicle
     fn is_safe_to_spawn(&self, direction: Direction, route: Route, spawn_pos: (f32, f32)) -> bool {
-        // Create temporary visual bounds for spawn vehicle
-        let temp_rotation = match direction {
-            Direction::North => 0.0,
-            Direction::South => 180.0,
-            Direction::East => 90.0,
-            Direction::West => 270.0,
-        };
+        // Simplified spawn safety check
+        for vehicle in &self.active_vehicles {
+            if vehicle.direction == direction && vehicle.route == route {
+                let distance = match direction {
+                    Direction::North | Direction::South => (vehicle.position.1 - spawn_pos.1).abs(),
+                    Direction::East | Direction::West => (vehicle.position.0 - spawn_pos.0).abs(),
+                };
 
-        let width = 40.0;
-        let height = 70.0;
-        let center_x = spawn_pos.0 + width / 2.0;
-        let center_y = spawn_pos.1 + height / 2.0;
-        
-        let (spawn_vx, spawn_vy, spawn_vw, spawn_vh) = match temp_rotation as i32 % 360 {
-            0 | 180 => (spawn_pos.0, spawn_pos.1, width, height),
-            90 | 270 => {
-                let visual_width = height;
-                let visual_height = width;
-                let visual_x = center_x - visual_width / 2.0;
-                let visual_y = center_y - visual_height / 2.0;
-                (visual_x, visual_y, visual_width, visual_height)
-            },
-            _ => (spawn_pos.0, spawn_pos.1, width, height)
-        };
-
-        let spawn_visual_center = (spawn_vx + spawn_vw / 2.0, spawn_vy + spawn_vh / 2.0);
-
-        for vehicle in self.active_vehicles
-            .iter()
-            .filter(|v| v.direction == direction && v.route == route)
-        {
-            let other_visual_center = vehicle.get_visual_center();
-            let (_, _, other_vw, other_vh) = vehicle.get_visual_bounds();
-
-            // Calculate distance between visual bounds
-            let distance = match direction {
-                Direction::North => {
-                    if other_visual_center.1 < spawn_visual_center.1 {
-                        spawn_visual_center.1 - other_visual_center.1 - (spawn_vh / 2.0 + other_vh / 2.0)
-                    } else {
-                        continue;
-                    }
+                if distance < 100.0 {
+                    // Minimum spawn distance
+                    return false;
                 }
-                Direction::South => {
-                    if other_visual_center.1 > spawn_visual_center.1 {
-                        other_visual_center.1 - spawn_visual_center.1 - (spawn_vh / 2.0 + other_vh / 2.0)
-                    } else {
-                        continue;
-                    }
-                }
-                Direction::East => {
-                    if other_visual_center.0 > spawn_visual_center.0 {
-                        other_visual_center.0 - spawn_visual_center.0 - (spawn_vw / 2.0 + other_vw / 2.0)
-                    } else {
-                        continue;
-                    }
-                }
-                Direction::West => {
-                    if other_visual_center.0 < spawn_visual_center.0 {
-                        spawn_visual_center.0 - other_visual_center.0 - (spawn_vw / 2.0 + other_vw / 2.0)
-                    } else {
-                        continue;
-                    }
-                }
-            };
-
-            // Check if distance is safe
-            if distance < vehicle.safety_distance {
-                return false;
             }
         }
-
         true
     }
 
-    /// Track intersection entry and exit times
     fn track_intersection_times(&mut self, current_time: f32) {
         let mut to_remove = Vec::new();
-        
+
         for vehicle in &self.active_vehicles {
             let vehicle_id = vehicle.id;
-            
+
             if vehicle.is_in_intersection() {
-                // Vehicle entered intersection
                 if !self.vehicle_intersection_times.contains_key(&vehicle_id) {
-                    self.vehicle_intersection_times.insert(vehicle_id, current_time);
+                    self.vehicle_intersection_times
+                        .insert(vehicle_id, current_time);
                 }
             } else if self.vehicle_intersection_times.contains_key(&vehicle_id) {
-                // Vehicle exited intersection
                 let entry_time = self.vehicle_intersection_times[&vehicle_id];
                 let time_in_intersection = current_time - entry_time;
-                
-                // Update stats
+
                 if time_in_intersection > self.max_time_in_intersection {
                     self.max_time_in_intersection = time_in_intersection;
                 }
                 if time_in_intersection < self.min_time_in_intersection {
                     self.min_time_in_intersection = time_in_intersection;
                 }
-                
+
                 to_remove.push(vehicle_id);
-                println!("Vehicle {} exited intersection after {:.2} seconds", vehicle_id, time_in_intersection);
             }
         }
-        
-        // Remove vehicles that exited intersection from tracking
+
         for id in to_remove {
             self.vehicle_intersection_times.remove(&id);
         }
     }
 
-    /// Update stats when a vehicle exits the simulation (using data instead of reference)
-    fn update_stats_for_exiting_vehicle_by_data(&mut self, vehicle_id: usize, current_speed: Velocity, _current_time: f32) {
+    fn update_stats_for_exiting_vehicle_by_data(
+        &mut self,
+        vehicle_id: usize,
+        current_speed: Velocity,
+        _current_time: f32,
+    ) {
         self.total_vehicles_passed += 1;
-        
-        // Update velocity stats
+
         let vehicle_max_speed = match current_speed {
             Velocity::Slow => 3.0,
             Velocity::Medium => 5.0,
             Velocity::Fast => 7.0,
+            Velocity::Stopped => 0.0,
         };
-        
+
         if vehicle_max_speed > self.max_velocity_recorded {
             self.max_velocity_recorded = vehicle_max_speed;
         }
         if vehicle_max_speed < self.min_velocity_recorded {
             self.min_velocity_recorded = vehicle_max_speed;
         }
-        
-        // Clean up any remaining intersection time tracking
+
         self.vehicle_intersection_times.remove(&vehicle_id);
-        
-        println!("Vehicle {} completed journey. Total vehicles passed: {}", 
-                 vehicle_id, self.total_vehicles_passed);
     }
 
-    /// Update stats when a vehicle exits the simulation
-    fn update_stats_for_exiting_vehicle(&mut self, vehicle: &Vehicle, _current_time: f32) {
-        self.update_stats_for_exiting_vehicle_by_data(vehicle.id, vehicle.current_speed, _current_time);
+    fn detect_close_calls(&mut self, vehicle_index: usize) {
+        let current_vehicle = &self.active_vehicles[vehicle_index];
+        if !current_vehicle.is_in_intersection() {
+            return;
+        }
+
+        for (j, other_vehicle) in self.active_vehicles.iter().enumerate() {
+            if vehicle_index == j {
+                continue;
+            }
+
+            // Create a normalized pair (smaller ID first) to avoid counting (2,3) and (3,2) as different
+            let pair = if current_vehicle.id < other_vehicle.id {
+                (current_vehicle.id, other_vehicle.id)
+            } else {
+                (other_vehicle.id, current_vehicle.id)
+            };
+
+            // Skip if we already processed this pair this frame
+            if self.close_call_pairs_this_frame.contains(&pair) {
+                continue;
+            }
+
+            let distance = current_vehicle.distance_to_vehicle(other_vehicle);
+            let min_safe_distance = 5.0;
+
+            if distance < min_safe_distance
+                && (current_vehicle.is_in_intersection() && other_vehicle.is_in_intersection())
+            {
+                self.close_calls += 1;
+                self.close_call_pairs_this_frame.insert(pair);
+            }
+        }
     }
 
-    /// Print final statistics
     pub fn print_final_stats(&self) {
         println!("\n=== SMART INTERSECTION FINAL STATISTICS ===");
         println!("Total vehicles passed: {}", self.total_vehicles_passed);
-        println!("Max velocity recorded: {:.1} pixels/frame", self.max_velocity_recorded);
-        println!("Min velocity recorded: {:.1} pixels/frame", 
-                 if self.min_velocity_recorded == f32::MAX { 0.0 } else { self.min_velocity_recorded });
-        println!("Max time in intersection: {:.2} seconds", self.max_time_in_intersection);
-        println!("Min time in intersection: {:.2} seconds", 
-                 if self.min_time_in_intersection == f32::MAX { 0.0 } else { self.min_time_in_intersection });
+        println!(
+            "Max velocity recorded: {:.1} pixels/frame",
+            self.max_velocity_recorded
+        );
+        println!(
+            "Min velocity recorded: {:.1} pixels/frame",
+            if self.min_velocity_recorded == f32::MAX {
+                0.0
+            } else {
+                self.min_velocity_recorded
+            }
+        );
+        println!(
+            "Max time in intersection: {:.2} seconds",
+            self.max_time_in_intersection
+        );
+        println!(
+            "Min time in intersection: {:.2} seconds",
+            if self.min_time_in_intersection == f32::MAX {
+                0.0
+            } else {
+                self.min_time_in_intersection
+            }
+        );
         println!("Close calls detected: {}", self.close_calls);
         println!("Active vehicles remaining: {}", self.active_vehicles.len());
         println!("==========================================\n");
     }
 
-    /// Remove a specific vehicle by ID
-    pub fn remove_vehicle(&mut self, vehicle_id: usize) -> Option<Vehicle<'a>> {
-        if let Some(pos) = self.active_vehicles.iter().position(|v| v.id == vehicle_id) {
-            Some(self.active_vehicles.remove(pos))
-        } else {
-            None
-        }
-    }
-
-    /// Try to reserve cells along the path for this vehicle
-    pub fn request_cells(
-        &mut self,
-        vehicle_id: usize,
-        cells: &[(usize, usize)], // list of (col,row) coordinates
-        entry_time: f32,
-        exit_time: f32,
-    ) -> bool {
-        // First check if all requested cells are free
-        for &(col, row) in cells {
-            if col >= self.cols || row >= self.rows {
-                continue; // Skip out of bounds cells
-            }
-            let idx = self.cell_index(col, row);
-            if self.conflict(&self.grid[idx], entry_time, exit_time) {
-                return false; // conflict found, reject request
-            }
-        }
-
-        // No conflicts → reserve them
-        for &(col, row) in cells {
-            if col >= self.cols || row >= self.rows {
-                continue; // Skip out of bounds cells
-            }
-            let idx = self.cell_index(col, row);
-            self.grid[idx].slots.push(TimeSlot {
-                start: entry_time,
-                end: exit_time,
-                vehicle_id,
-            });
-        }
-
-        true
-    }
-
-    /// Release specific cells that a vehicle has passed through
-    pub fn release_specific_cells(&mut self, cells: &[(usize, usize)], vehicle_id: usize) {
+    fn release_specific_cells(&mut self, cells: &[(usize, usize)], vehicle_id: usize) {
         for &(col, row) in cells {
             if col >= self.cols || row >= self.rows {
                 continue;
             }
             let idx = self.cell_index(col, row);
-            // Remove only the reservations made by this specific vehicle
             self.grid[idx]
                 .slots
                 .retain(|slot| slot.vehicle_id != vehicle_id);
         }
     }
 
-    /// Update all vehicles with traffic and intersection management
-    fn update_vehicles_with_intersection(&mut self, current_time: f32) {
-        // Calculate traffic speeds for all vehicles first
-        let mut target_speeds = Vec::with_capacity(self.active_vehicles.len());
-
-        for i in 0..self.active_vehicles.len() {
-            let current_vehicle = &self.active_vehicles[i];
-
-            // If vehicle is past intersection, it can go fast (no collision risk)
-            if current_vehicle.is_past_intersection() {
-                target_speeds.push(Velocity::Fast);
-                continue;
-            }
-
-            let mut target_speed = Velocity::Fast;
-            let mut closest_distance = f32::MAX;
-            let mut required_distance = 0.0;
-
-            // Check traffic by manually iterating through other vehicles
-            for (j, other_vehicle) in self.active_vehicles.iter().enumerate() {
-                if i == j {
-                    continue;
-                }
-
-                // Only check vehicles that are ahead and in same lane
-                if current_vehicle.is_ahead_of_me(other_vehicle) {
-                    let distance = current_vehicle.distance_to_vehicle(other_vehicle);
-                    if distance < closest_distance {
-                        closest_distance = distance;
-                        required_distance = current_vehicle.get_safe_following_distance(other_vehicle);
-                    }
-                }
-            }
-
-            // Determine speed based on closest vehicle ahead
-            if closest_distance != f32::MAX && closest_distance < required_distance {
-                if closest_distance < required_distance * 0.4 {
-                    target_speed = Velocity::Slow; // Very close - slow down significantly
-                } else if closest_distance < required_distance * 0.8 {
-                    target_speed = Velocity::Medium; // Getting close - moderate speed
-                }
-                // If distance >= required_distance * 0.8, keep Fast speed
-            }
-
-            target_speeds.push(target_speed);
-        }
-
-        // Collect all vehicle data needed for intersection management to avoid borrowing conflicts
-        let mut vehicle_updates = Vec::new();
-        
-        for i in 0..self.active_vehicles.len() {
-            let vehicle = &self.active_vehicles[i];
-            let vehicle_id = vehicle.id;
-            let distance_to_intersection = vehicle.distance_to_intersection();
-            let is_past_intersection = vehicle.is_past_intersection();
-            let is_in_intersection = vehicle.is_in_intersection();
-            let mut requested_intersection = vehicle.requested_intersection;
-            let mut intersection_permission = vehicle.intersection_permission;
-            let vehicle_route = vehicle.route;
-            let vehicle_direction = vehicle.direction;
-            let (vx, vy, vw, vh) = vehicle.get_visual_bounds();
-            let traffic_speed = target_speeds[i];
-
-            // Reset intersection status if vehicle is far away
-            if distance_to_intersection > 150.0 {
-                requested_intersection = false;
-                intersection_permission = false;
-            }
-
-            // Calculate intersection speed
-            let intersection_speed = if is_past_intersection {
-                Velocity::Fast
-            } else if distance_to_intersection > 120.0 {
-                Velocity::Fast
-            } else if is_in_intersection {
-                Velocity::Fast
-            } else if !requested_intersection {
-                // Need to request intersection permission
-                let permission = self.try_intersection_request_by_data(
-                    vehicle_id, vehicle_route, vehicle_direction, 
-                    current_time, distance_to_intersection
-                );
-                requested_intersection = true;
-                intersection_permission = permission;
-                
-                if permission {
-                    Velocity::Fast
-                } else {
-                    if distance_to_intersection < 25.0 {
-                        Velocity::Slow
-                    } else if distance_to_intersection < 60.0 {
-                        Velocity::Medium
-                    } else {
-                        Velocity::Medium
-                    }
-                }
-            } else {
-                // Already requested, use existing permission
-                if intersection_permission {
-                    Velocity::Fast
-                } else {
-                    if distance_to_intersection < 25.0 {
-                        Velocity::Slow
-                    } else if distance_to_intersection < 60.0 {
-                        Velocity::Medium
-                    } else {
-                        Velocity::Medium
-                    }
-                }
-            };
-
-            // Calculate final speed
-            let final_speed = if is_past_intersection {
-                Velocity::Fast
-            } else {
-                match (traffic_speed, intersection_speed) {
-                    (Velocity::Slow, _) | (_, Velocity::Slow) => Velocity::Slow,
-                    (Velocity::Medium, _) | (_, Velocity::Medium) => Velocity::Medium,
-                    (Velocity::Fast, Velocity::Fast) => Velocity::Fast,
-                }
-            };
-
-            // Calculate cells to release if needed
-            let cells_to_release = if is_in_intersection || distance_to_intersection < 50.0 {
-                let zone_px = self.zone_px as f32;
-                self.calculate_cells_to_release(vehicle_direction, vx, vy, vw, vh, zone_px)
-            } else {
-                Vec::new()
-            };
-
-            vehicle_updates.push((i, final_speed, requested_intersection, 
-                                intersection_permission, cells_to_release, vehicle_id));
-        }
-
-        // Now apply all updates without borrowing conflicts
-        for (i, final_speed, requested_intersection, intersection_permission, cells_to_release, vehicle_id) in vehicle_updates {
-            let vehicle = &mut self.active_vehicles[i];
-            
-            // Apply the speed
-            vehicle.current_speed = final_speed;
-            
-            // Update intersection status
-            vehicle.requested_intersection = requested_intersection;
-            vehicle.intersection_permission = intersection_permission;
-
-            // Update vehicle position
-            vehicle.update();
-
-            // Release cells if needed
-            if !cells_to_release.is_empty() {
-                self.release_specific_cells(&cells_to_release, vehicle_id);
-            }
-
-            // Detect close calls
-            self.detect_close_calls(i);
-        }
-    }
-
-    /// Detect close calls between vehicles
-    fn detect_close_calls(&mut self, vehicle_index: usize) {
-        let current_vehicle = &self.active_vehicles[vehicle_index];
-        
-        for (j, other_vehicle) in self.active_vehicles.iter().enumerate() {
-            if vehicle_index == j {
-                continue;
-            }
-            
-            // Check if vehicles are very close
-            let distance = current_vehicle.distance_to_vehicle(other_vehicle);
-            let min_safe_distance = 30.0; // Very close threshold
-            
-            if distance < min_safe_distance && 
-               (current_vehicle.is_in_intersection() || other_vehicle.is_in_intersection()) {
-                self.close_calls += 1;
-                println!("Close call detected between vehicles {} and {} at distance {:.1}", 
-                        current_vehicle.id, other_vehicle.id, distance);
-            }
-        }
-    }
-
-    /// Calculate cells to release behind a moving vehicle
-    fn calculate_cells_to_release(
-        &self,
-        direction: Direction,
-        vx: f32,
-        vy: f32,
-        vw: f32,
-        vh: f32,
-        zone_px: f32,
-    ) -> Vec<(usize, usize)> {
-        match direction {
-            Direction::North => {
-                // Release cells below visual bounds
-                let behind_y = vy + vh + zone_px;
-                if behind_y >= IX_MIN && behind_y < IX_MAX {
-                    let left_col = ((vx - IX_MIN) / zone_px) as usize;
-                    let right_col = ((vx + vw - IX_MIN) / zone_px) as usize;
-                    let row = ((behind_y - IY_MIN) / zone_px) as usize;
-
-                    let mut cells = Vec::new();
-                    for col in left_col..=right_col.min(self.cols - 1) {
-                        if col < self.cols && row < self.rows {
-                            cells.push((col, row));
-                        }
-                    }
-                    cells
-                } else {
-                    vec![]
-                }
-            }
-            Direction::South => {
-                // Release cells above visual bounds
-                let behind_y = vy - zone_px;
-                if behind_y >= IY_MIN {
-                    let left_col = ((vx - IX_MIN) / zone_px) as usize;
-                    let right_col = ((vx + vw - IX_MIN) / zone_px) as usize;
-                    let row = ((behind_y - IY_MIN) / zone_px) as usize;
-
-                    let mut cells = Vec::new();
-                    for col in left_col..=right_col.min(self.cols - 1) {
-                        if col < self.cols && row < self.rows {
-                            cells.push((col, row));
-                        }
-                    }
-                    cells
-                } else {
-                    vec![]
-                }
-            }
-            Direction::East => {
-                // Release cells to the left of visual bounds
-                let behind_x = vx - zone_px;
-                if behind_x >= IX_MIN {
-                    let top_row = ((vy - IY_MIN) / zone_px) as usize;
-                    let bottom_row = ((vy + vh - IY_MIN) / zone_px) as usize;
-                    let col = ((behind_x - IX_MIN) / zone_px) as usize;
-
-                    let mut cells = Vec::new();
-                    for row in top_row..=bottom_row.min(self.rows - 1) {
-                        if col < self.cols && row < self.rows {
-                            cells.push((col, row));
-                        }
-                    }
-                    cells
-                } else {
-                    vec![]
-                }
-            }
-            Direction::West => {
-                // Release cells to the right of visual bounds
-                let behind_x = vx + vw + zone_px;
-                if behind_x < IX_MAX {
-                    let top_row = ((vy - IY_MIN) / zone_px) as usize;
-                    let bottom_row = ((vy + vh - IY_MIN) / zone_px) as usize;
-                    let col = ((behind_x - IX_MIN) / zone_px) as usize;
-
-                    let mut cells = Vec::new();
-                    for row in top_row..=bottom_row.min(self.rows - 1) {
-                        if col < self.cols && row < self.rows {
-                            cells.push((col, row));
-                        }
-                    }
-                    cells
-                } else {
-                    vec![]
-                }
-            }
-        }
-    }
-
-    /// Try to get intersection permission using vehicle data
-    fn try_intersection_request_by_data(
-        &mut self,
-        vehicle_id: usize,
-        route: Route,
-        direction: Direction,
-        current_time: f32,
-        distance_to_intersection: f32,
-    ) -> bool {
-        let time_to_intersection =
-            self.calculate_time_to_intersection_by_speed(distance_to_intersection);
-        let crossing_time = self.calculate_crossing_time_by_direction(direction);
-
-        let entry_time = current_time + time_to_intersection;
-        let exit_time = entry_time + crossing_time;
-
-        let required_cells = self.calculate_vehicle_path_cells_by_data(route, direction);
-
-        self.request_cells(vehicle_id, &required_cells, entry_time, exit_time)
-    }
-
-    /// Calculate time for vehicle to reach intersection using default speed assumptions
-    fn calculate_time_to_intersection_by_speed(&self, distance: f32) -> f32 {
-        let speed_pixels_per_frame = 5.0; // Use medium speed as default assumption
-
-        if speed_pixels_per_frame == 0.0 {
-            return f32::MAX;
-        }
-
-        // Convert frames to seconds (assuming 60 FPS)
-        distance / speed_pixels_per_frame / 60.0
-    }
-
-    /// Calculate time for vehicle to cross intersection completely using direction
-    fn calculate_crossing_time_by_direction(&self, direction: Direction) -> f32 {
-        // Intersection crossing distance plus vehicle length to clear completely
-        let crossing_distance = match direction {
-            Direction::North | Direction::South => {
-                300.0 + 70.0 // height
-            }
-            Direction::East | Direction::West => {
-                300.0 + 40.0 // width
-            }
-        };
-
-        let speed_pixels_per_frame = 7.0; // Assume fast speed when crossing
-        crossing_distance / speed_pixels_per_frame / 60.0
-    }
-
-    /// Calculate which cells vehicle will need during crossing using data
-    fn calculate_vehicle_path_cells_by_data(&self, route: Route, direction: Direction) -> Vec<(usize, usize)> {
-        let mut cells = Vec::new();
-        let zone_px = self.zone_px as f32;
-
-        match route {
-            Route::Straight => {
-                self.get_straight_path_cells_by_direction(direction, zone_px, &mut cells);
-            }
-            Route::Right => {
-                self.get_right_turn_path_cells_by_direction(direction, zone_px, &mut cells);
-            }
-            Route::Left => {
-                self.get_left_turn_path_cells_by_direction(&mut cells);
-            }
-        }
-
-        cells
-    }
-
-    fn get_straight_path_cells_by_direction(
-        &self,
-        direction: Direction,
-        zone_px: f32,
-        cells: &mut Vec<(usize, usize)>,
-    ) {
-        // Use approximate vehicle positioning based on direction and route
-        match direction {
-            Direction::North | Direction::South => {
-                // Reserve entire columns for straight paths
-                let start_col = 0;
-                let end_col = self.cols;
-
-                for col in start_col..end_col {
-                    for row in 0..self.rows {
-                        cells.push((col, row));
-                    }
-                }
-            }
-            Direction::East | Direction::West => {
-                // Reserve entire rows for straight paths
-                let start_row = 0;
-                let end_row = self.rows;
-
-                for row in start_row..end_row {
-                    for col in 0..self.cols {
-                        cells.push((col, row));
-                    }
-                }
-            }
-        }
-    }
-
-    fn get_right_turn_path_cells_by_direction(
-        &self,
-        direction: Direction,
-        _zone_px: f32,
-        cells: &mut Vec<(usize, usize)>,
-    ) {
-        // For right turns, reserve a broader area to be safe
-        match direction {
-            Direction::North => {
-                // Vehicle turning from south to east
-                for row in 0..self.rows {
-                    for col in (self.cols / 2)..self.cols {
-                        cells.push((col, row));
-                    }
-                }
-            }
-            Direction::South => {
-                // Vehicle turning from north to west
-                for row in 0..self.rows {
-                    for col in 0..(self.cols / 2) {
-                        cells.push((col, row));
-                    }
-                }
-            }
-            Direction::East => {
-                // Vehicle turning from west to south
-                for row in (self.rows / 2)..self.rows {
-                    for col in 0..self.cols {
-                        cells.push((col, row));
-                    }
-                }
-            }
-            Direction::West => {
-                // Vehicle turning from east to north
-                for row in 0..(self.rows / 2) {
-                    for col in 0..self.cols {
-                        cells.push((col, row));
-                    }
-                }
-            }
-        }
-    }
-
-    fn get_left_turn_path_cells_by_direction(
-        &self,
-        cells: &mut Vec<(usize, usize)>,
-    ) {
-        // Left turns need the entire intersection
-        for row in 0..self.rows {
-            for col in 0..self.cols {
-                cells.push((col, row));
-            }
-        }
-    }
-
-    /// Try to get intersection permission
-    fn try_intersection_request(
-        &mut self,
-        vehicle: &Vehicle,
-        current_time: f32,
-        distance_to_intersection: f32,
-    ) -> bool {
-        let time_to_intersection =
-            self.calculate_time_to_intersection(vehicle, distance_to_intersection);
-        let crossing_time = self.calculate_crossing_time(vehicle);
-
-        let entry_time = current_time + time_to_intersection;
-        let exit_time = entry_time + crossing_time;
-
-        let required_cells = self.calculate_vehicle_path_cells(vehicle);
-
-        self.request_cells(vehicle.id, &required_cells, entry_time, exit_time)
-    }
-
-    /// Calculate time for vehicle to reach intersection
-    fn calculate_time_to_intersection(&self, vehicle: &Vehicle, distance: f32) -> f32 {
-        let speed_pixels_per_frame = match vehicle.current_speed {
-            Velocity::Slow => 3.0,
-            Velocity::Medium => 5.0,
-            Velocity::Fast => 7.0,
-        };
-
-        if speed_pixels_per_frame == 0.0 {
-            return f32::MAX;
-        }
-
-        // Convert frames to seconds (assuming 60 FPS)
-        distance / speed_pixels_per_frame / 60.0
-    }
-
-    /// Calculate time for vehicle to cross intersection completely
-    fn calculate_crossing_time(&self, vehicle: &Vehicle) -> f32 {
-        // Intersection crossing distance plus vehicle length to clear completely
-        let crossing_distance = match vehicle.direction {
-            Direction::North | Direction::South => {
-                300.0 + vehicle.height as f32
-            }
-            Direction::East | Direction::West => {
-                300.0 + vehicle.width as f32
-            }
-        };
-
-        let speed_pixels_per_frame = 7.0; // Assume fast speed when crossing
-        crossing_distance / speed_pixels_per_frame / 60.0
-    }
-
-    /// Calculate which cells vehicle will need during crossing
-    fn calculate_vehicle_path_cells(&self, vehicle: &Vehicle) -> Vec<(usize, usize)> {
-        let mut cells = Vec::new();
-        let zone_px = self.zone_px as f32;
-
-        match vehicle.route {
-            Route::Straight => {
-                self.get_straight_path_cells(vehicle, zone_px, &mut cells);
-            }
-            Route::Right => {
-                self.get_right_turn_path_cells(vehicle, zone_px, &mut cells);
-            }
-            Route::Left => {
-                self.get_left_turn_path_cells(vehicle, zone_px, &mut cells);
-            }
-        }
-
-        cells
-    }
-
-    fn get_straight_path_cells(
-        &self,
-        vehicle: &Vehicle,
-        zone_px: f32,
-        cells: &mut Vec<(usize, usize)>,
-    ) {
-        let (vx, vy, vw, vh) = vehicle.get_visual_bounds();
-
-        match vehicle.direction {
-            Direction::North | Direction::South => {
-                // Reserve column(s) that the visual bounds occupy
-                let left_col = ((vx - IX_MIN) / zone_px) as usize;
-                let right_col = ((vx + vw - IX_MIN) / zone_px) as usize;
-
-                for col in left_col..=right_col.min(self.cols - 1) {
-                    if col < self.cols {
-                        for row in 0..self.rows {
-                            cells.push((col, row));
-                        }
-                    }
-                }
-            }
-            Direction::East | Direction::West => {
-                // Reserve row(s) that the visual bounds occupy
-                let top_row = ((vy - IY_MIN) / zone_px) as usize;
-                let bottom_row = ((vy + vh - IY_MIN) / zone_px) as usize;
-
-                for row in top_row..=bottom_row.min(self.rows - 1) {
-                    if row < self.rows {
-                        for col in 0..self.cols {
-                            cells.push((col, row));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn get_right_turn_path_cells(
-        &self,
-        vehicle: &Vehicle,
-        zone_px: f32,
-        cells: &mut Vec<(usize, usize)>,
-    ) {
-        let (vx, vy, vw, vh) = vehicle.get_visual_bounds();
-
-        match vehicle.direction {
-            Direction::North => {
-                // Vehicle visual bounds occupy certain cells
-                let start_col = ((vx - IX_MIN) / zone_px) as usize;
-                let end_col = self.cols;
-                let start_row = ((vy - IY_MIN) / zone_px) as usize;
-                let end_row = ((vy + vh - IY_MIN) / zone_px) as usize + 5; // Extra for turn
-
-                for row in start_row..end_row.min(self.rows) {
-                    for col in start_col..end_col.min(self.cols) {
-                        cells.push((col, row));
-                    }
-                }
-            }
-            Direction::South => {
-                let end_col = ((vx + vw - IX_MIN) / zone_px) as usize + 1;
-                let start_row = ((vy - IX_MIN) / zone_px) as usize;
-                let end_row = ((vy + vh - IY_MIN) / zone_px) as usize + 5;
-
-                for row in start_row..end_row.min(self.rows) {
-                    for col in 0..end_col.min(self.cols) {
-                        cells.push((col, row));
-                    }
-                }
-            }
-            Direction::East => {
-                let start_col = ((vx - IX_MIN) / zone_px) as usize;
-                let end_col = ((vx + vw - IX_MIN) / zone_px) as usize + 5;
-                let start_row = ((vy - IY_MIN) / zone_px) as usize;
-                let end_row = self.rows;
-
-                for row in start_row..end_row.min(self.rows) {
-                    for col in start_col..end_col.min(self.cols) {
-                        cells.push((col, row));
-                    }
-                }
-            }
-            Direction::West => {
-                let start_col = ((vx - IX_MIN) / zone_px) as usize;
-                let end_col = ((vx + vw - IX_MIN) / zone_px) as usize + 5;
-                let end_row = ((vy + vh - IY_MIN) / zone_px) as usize + 1;
-
-                for row in 0..end_row.min(self.rows) {
-                    for col in start_col..end_col.min(self.cols) {
-                        cells.push((col, row));
-                    }
-                }
-            }
-        }
-    }
-
-    fn get_left_turn_path_cells(
-        &self,
-        _vehicle: &Vehicle,
-        _zone_px: f32,
-        cells: &mut Vec<(usize, usize)>,
-    ) {
-        for row in 0..self.rows {
-            for col in 0..self.cols {
-                cells.push((col, row));
-            }
-        }
-    }
-
-    /// Reset vehicle's intersection request when it's far enough away (kept for compatibility)
-    pub fn reset_vehicle_intersection_status(&mut self, vehicle: &mut Vehicle) {
-        if vehicle.distance_to_intersection() > 150.0 {
-            vehicle.requested_intersection = false;
-            vehicle.intersection_permission = false;
-        }
-    }
-
-    /// Check if a cell has a conflicting reservation
     fn conflict(&self, cell: &Cell, start: f32, end: f32) -> bool {
         cell.slots
             .iter()
             .any(|slot| start < slot.end && slot.start < end)
     }
 
-    /// Utility: convert (col,row) to index
     fn cell_index(&self, col: usize, row: usize) -> usize {
         row * self.cols + col
-    }
-}
-
-/// Helper function to release cells behind a moving vehicle (kept for compatibility)
-pub fn release_cells_behind_vehicle(intersection: &mut SmartIntersection, vehicle: &Vehicle) {
-    let zone_px = intersection.zone_px as f32;
-    let (vx, vy, vw, vh) = vehicle.get_visual_bounds();
-
-    let cells_to_release = intersection.calculate_cells_to_release(
-        vehicle.direction, vx, vy, vw, vh, zone_px
-    );
-
-    if !cells_to_release.is_empty() {
-        intersection.release_specific_cells(&cells_to_release, vehicle.id);
     }
 }

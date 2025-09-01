@@ -65,9 +65,10 @@ impl<'a> Vehicle<'a> {
 
     pub fn update(&mut self) {
         let pixels_per_frame = match self.current_speed {
-            Velocity::Slow => 3.0,   // 3 pixel per frame
-            Velocity::Medium => 5.0, // 5 pixels per frame
-            Velocity::Fast => 7.0,   // 7 pixels per frame
+            Velocity::Slow => 3.0,    // 3 pixel per frame
+            Velocity::Medium => 5.0,  // 5 pixels per frame
+            Velocity::Fast => 7.0,    // 7 pixels per frame
+            Velocity::Stopped => 0.0, // vehicle doesnt move
         };
 
         if !self.has_turned {
@@ -164,35 +165,10 @@ impl<'a> Vehicle<'a> {
             Route::Straight => {} // no turn
         }
     }
-
-    // Vehicle methods for collision detection and safety
-    pub fn get_center(&self) -> (f32, f32) {
-        (
-            self.position.0 + self.width as f32 / 2.0,
-            self.position.1 + self.height as f32 / 2.0,
-        )
-    }
     pub fn get_visual_center(&self) -> (f32, f32) {
         let (vx, vy, vw, vh) = self.get_visual_bounds();
         (vx + vw / 2.0, vy + vh / 2.0)
     }
-
-    pub fn get_effective_dimensions(&self) -> (f32, f32) {
-        let (_, _, vw, vh) = self.get_visual_bounds();
-        (vw, vh)
-    }
-    pub fn get_front_position(&self) -> (f32, f32) {
-        let (vx, vy, vw, vh) = self.get_visual_bounds();
-        let center = (vx + vw / 2.0, vy + vh / 2.0);
-
-        match self.direction {
-            Direction::North => (center.0, vy),
-            Direction::South => (center.0, vy + vh),
-            Direction::East => (vx + vw, center.1),
-            Direction::West => (vx, center.1),
-        }
-    }
-
     pub fn distance_to_intersection(&self) -> f32 {
         let (vx, vy, vw, vh) = self.get_visual_bounds();
         let center = (vx + vw / 2.0, vy + vh / 2.0);
@@ -284,38 +260,8 @@ impl<'a> Vehicle<'a> {
         }
     }
 
-    pub fn get_safe_following_distance(&self, lead_vehicle: &Vehicle) -> f32 {
+    pub fn get_safe_following_distance(&self, _lead_vehicle: &Vehicle) -> f32 {
         70.0 + self.safety_distance
-    }
-
-    pub fn should_slow_for_traffic(&self, vehicles: &[Vehicle]) -> Option<Velocity> {
-        let mut closest_distance = f32::MAX;
-        let mut required_distance = 0.0;
-
-        for other in vehicles {
-            if other.id == self.id || !self.is_ahead_of_me(other) {
-                continue;
-            }
-
-            let distance = self.distance_to_vehicle(other);
-            if distance < closest_distance {
-                closest_distance = distance;
-                required_distance = self.get_safe_following_distance(other);
-            }
-        }
-
-        if closest_distance == f32::MAX {
-            return None; // No vehicle ahead
-        }
-
-        // Determine speed based on distance to vehicle ahead
-        if closest_distance < required_distance * 0.3 {
-            Some(Velocity::Slow) // Very close
-        } else if closest_distance < required_distance * 0.7 {
-            Some(Velocity::Medium) // Getting close
-        } else {
-            None // Safe distance
-        }
     }
 
     pub fn is_outside_canvas(&self) -> bool {
