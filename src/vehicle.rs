@@ -259,6 +259,31 @@ impl<'a> Vehicle<'a> {
             Direction::East | Direction::West => (my_center.0 - other_center.0).abs(),
         }
     }
+    fn calculate_exit_position(&self) -> (f32, f32) {
+        // Use the turn position to determine the appropriate exit position
+        let turn_pos = self.turn_position;
+
+        // Determine final direction after turn
+        let final_direction = match (self.direction, self.route) {
+            (Direction::North, Route::Right) => Direction::East,
+            (Direction::North, Route::Left) => Direction::West,
+            (Direction::South, Route::Right) => Direction::West,
+            (Direction::South, Route::Left) => Direction::East,
+            (Direction::East, Route::Right) => Direction::South,
+            (Direction::East, Route::Left) => Direction::North,
+            (Direction::West, Route::Right) => Direction::North,
+            (Direction::West, Route::Left) => Direction::South,
+            _ => self.direction,
+        };
+
+        // Exit position maintains the same lane position (x or y) as the turn position
+        match final_direction {
+            Direction::North => (turn_pos.0, 0.0), // Keep x from turn, exit at top
+            Direction::South => (turn_pos.0, 1000.0), // Keep x from turn, exit at bottom
+            Direction::East => (1000.0, turn_pos.1), // Keep y from turn, exit at right
+            Direction::West => (0.0, turn_pos.1),  // Keep y from turn, exit at left
+        }
+    }
 
     pub fn get_safe_following_distance(&self, _lead_vehicle: &Vehicle) -> f32 {
         70.0 + self.safety_distance
