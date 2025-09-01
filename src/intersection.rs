@@ -846,7 +846,7 @@ impl<'a> SmartIntersection<'a> {
         &mut self,
         vehicle_id: usize,
         current_speed: Velocity,
-        _current_time: f32,
+        current_time: f32,
     ) {
         self.total_vehicles_passed += 1;
 
@@ -856,6 +856,15 @@ impl<'a> SmartIntersection<'a> {
             Velocity::Fast => 7.0,
             Velocity::Stopped => 0.0,
         };
+        let entry_time = self.vehicle_intersection_times[&vehicle_id];
+        let time_in_intersection = current_time - entry_time;
+
+        if time_in_intersection > self.max_time_in_intersection {
+            self.max_time_in_intersection = time_in_intersection;
+        }
+        if time_in_intersection < self.min_time_in_intersection {
+            self.min_time_in_intersection = time_in_intersection;
+        }
 
         if vehicle_max_speed > self.max_velocity_recorded {
             self.max_velocity_recorded = vehicle_max_speed;
