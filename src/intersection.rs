@@ -107,15 +107,6 @@ impl<'a> SmartIntersection<'a> {
         for &direction in &directions {
             for &route in &routes {
                 let path = self.calculate_vehicle_path(direction, route);
-
-                println!(
-                    "Cached path for {:?} {:?}: Segment1={} cells, Segment2={} cells",
-                    direction,
-                    route,
-                    path.segment1.cells.len(),
-                    path.segment2.as_ref().map_or(0, |s| s.cells.len())
-                );
-
                 self.path_cache.insert((direction, route), path); // This now works because path implements Clone
             }
         }
@@ -497,7 +488,7 @@ impl<'a> SmartIntersection<'a> {
                 if distance_to_intersection <= 10.0 && !intersection_permission {
                     // Vehicle is at intersection entrance and was previously denied
                     // Keep trying with fast speed while stopped
-                    let (permission, recommended_speed) = self.try_two_path_intersection_request(
+                    let (permission, _recommended_speed) = self.try_two_path_intersection_request(
                         vehicle_id,
                         vehicle_route,
                         vehicle_direction,
@@ -509,16 +500,8 @@ impl<'a> SmartIntersection<'a> {
                     intersection_permission = permission;
 
                     if permission {
-                        println!(
-                            "✅ Vehicle {} got permission after waiting - resuming at fast speed",
-                            vehicle_id
-                        );
                         Velocity::Fast
                     } else {
-                        println!(
-                            "🛑 Vehicle {} still waiting at intersection entrance",
-                            vehicle_id
-                        );
                         Velocity::Stopped
                     }
                 } else {
@@ -536,10 +519,6 @@ impl<'a> SmartIntersection<'a> {
 
                     if !permission && distance_to_intersection <= 15.0 {
                         // Close to intersection but denied - stop the vehicle
-                        println!(
-                            "🛑 Vehicle {} denied permission - stopping at intersection entrance",
-                            vehicle_id
-                        );
                         Velocity::Stopped
                     } else {
                         recommended_speed
@@ -625,7 +604,6 @@ impl<'a> SmartIntersection<'a> {
         let path = match self.path_cache.get(&(direction, route)) {
             Some(p) => p.clone(),
             None => {
-                println!("⚠️ No cached path for {:?} {:?}", direction, route);
                 return (false, Velocity::Slow);
             }
         };
@@ -684,24 +662,11 @@ impl<'a> SmartIntersection<'a> {
                     segment2_exit,
                 );
             }
-
-            println!(
-                "✅ Vehicle {} got intersection permission at speed {:?} (segments: {} + {} cells)",
-                vehicle_id,
-                attempt_speed,
-                path.segment1.cells.len(),
-                path.segment2.as_ref().map_or(0, |s| s.cells.len())
-            );
-
             return (true, attempt_speed);
         }
 
         if let Some(vehicle) = self.active_vehicles.iter_mut().find(|v| v.id == vehicle_id) {
             vehicle.current_speed = Velocity::Stopped;
-            println!(
-                "🛑 Vehicle {} STOPPED at intersection entrance - waiting for clearance",
-                vehicle_id
-            );
         }
         (false, Velocity::Stopped)
     }
@@ -846,19 +811,10 @@ impl<'a> SmartIntersection<'a> {
         if self.is_safe_to_spawn(dir, route, spawn_pos) {
             match Vehicle::new(texture_creator, route, dir, spawn_pos, turn_pos) {
                 Ok(vehicle) => {
-                    println!(
-                        "Spawning vehicle {} ({:?} {:?}) at ({:.0}, {:.0})",
-                        vehicle.id, dir, route, spawn_pos.0, spawn_pos.1
-                    );
                     self.active_vehicles.push(vehicle);
                 }
                 Err(e) => println!("Failed to create vehicle: {}", e),
             }
-        } else {
-            println!(
-                "Spawn blocked for {:?} {:?} - too close to existing vehicle",
-                dir, route
-            );
         }
     }
 
@@ -903,10 +859,6 @@ impl<'a> SmartIntersection<'a> {
                 }
 
                 to_remove.push(vehicle_id);
-                println!(
-                    "Vehicle {} exited intersection after {:.2} seconds",
-                    vehicle_id, time_in_intersection
-                );
             }
         }
 
@@ -938,11 +890,6 @@ impl<'a> SmartIntersection<'a> {
         }
 
         self.vehicle_intersection_times.remove(&vehicle_id);
-
-        println!(
-            "Vehicle {} completed journey. Total vehicles passed: {}",
-            vehicle_id, self.total_vehicles_passed
-        );
     }
 
     fn detect_close_calls(&mut self, vehicle_index: usize) {
@@ -976,7 +923,6 @@ impl<'a> SmartIntersection<'a> {
             {
                 self.close_calls += 1;
                 self.close_call_pairs_this_frame.insert(pair);
-               
             }
         }
     }
@@ -1033,151 +979,5 @@ impl<'a> SmartIntersection<'a> {
 
     fn cell_index(&self, col: usize, row: usize) -> usize {
         row * self.cols + col
-    }
-
-    /// Print the current state of the grid showing cell reservations
-    pub fn print_grid(&self, current_time: f32) {
-        println!(
-            "\n=== INTERSECTION GRID STATE (Time: {:.2}s) ===",
-            current_time
-        );
-        println!(
-            "Grid covers intersection area ({},{}) to ({},{})",
-            IX_MIN, IY_MIN, IX_MAX, IY_MAX
-        );
-        println!("Each cell is {}x{} pixels", self.zone_px, self.zone_px);
-        println!("Legend: [ ] = Free, [X] = Reserved, [#] = Multiple reservations");
-
-        // Print column headers
-        print!("   ");
-        for col in 0..self.cols.min(20) {
-            print!("{:2} ", col);
-        }
-        if self.cols > 20 {
-            print!("...");
-        }
-        println!();
-
-        // Print each row
-        for row in 0..self.rows.min(20) {
-            print!("{:2} ", row);
-
-            for col in 0..self.cols.min(20) {
-                let idx = self.cell_index(col, row);
-                let cell = &self.grid[idx];
-
-                let active_count = cell
-                    .slots
-                    .iter()
-                    .filter(|slot| slot.start <= current_time && current_time <= slot.end)
-                    .count();
-
-                let symbol = match active_count {
-                    0 => " ",
-                    1 => "X",
-                    _ => "#",
-                };
-
-                print!("[{}]", symbol);
-            }
-            if self.cols > 20 {
-                print!("...");
-            }
-            println!();
-        }
-        if self.rows > 20 {
-            println!("...");
-        }
-        println!("===========================================\n");
-    }
-
-    pub fn print_grid_stats(&self, current_time: f32) {
-        let mut total_cells = 0;
-        let mut active_cells = 0;
-        let mut future_reservations = 0;
-        let mut total_reservations = 0;
-
-        for cell in &self.grid {
-            total_cells += 1;
-            total_reservations += cell.slots.len();
-
-            let has_active = cell
-                .slots
-                .iter()
-                .any(|slot| slot.start <= current_time && current_time <= slot.end);
-
-            let has_future = cell.slots.iter().any(|slot| slot.start > current_time);
-
-            if has_active {
-                active_cells += 1;
-            }
-            if has_future {
-                future_reservations += 1;
-            }
-        }
-
-        println!("\n=== GRID STATISTICS (Time: {:.2}s) ===", current_time);
-        println!(
-            "Total cells: {} ({}x{} grid)",
-            total_cells, self.cols, self.rows
-        );
-        println!("Cell size: {}x{} pixels", self.zone_px, self.zone_px);
-        println!("Currently reserved cells: {}", active_cells);
-        println!("Cells with future reservations: {}", future_reservations);
-        println!("Total reservation slots: {}", total_reservations);
-        println!(
-            "Grid utilization: {:.1}%",
-            (active_cells as f32 / total_cells as f32) * 100.0
-        );
-        println!("Active vehicles: {}", self.active_vehicles.len());
-        println!("=====================================\n");
-    }
-
-    pub fn print_grid_with_vehicle_ids(&self, current_time: f32) {
-        println!(
-            "\n=== GRID WITH VEHICLE IDs (Time: {:.2}s) ===",
-            current_time
-        );
-        println!("Shows vehicle ID of current reservation, or . for free");
-
-        // Print column headers
-        print!("   ");
-        for col in 0..self.cols.min(20) {
-            print!("{:3}", col);
-        }
-        if self.cols > 20 {
-            print!("...");
-        }
-        println!();
-
-        // Print each row
-        for row in 0..self.rows.min(20) {
-            print!("{:2} ", row);
-
-            for col in 0..self.cols.min(20) {
-                let idx = self.cell_index(col, row);
-                let cell = &self.grid[idx];
-
-                // Find active reservation at current time
-                let active_vehicle = cell
-                    .slots
-                    .iter()
-                    .find(|slot| slot.start <= current_time && current_time <= slot.end)
-                    .map(|slot| slot.vehicle_id);
-
-                match active_vehicle {
-                    Some(id) => print!("{:3}", id),
-                    None => print!("  ."),
-                }
-            }
-            if self.cols > 20 {
-                print!("...");
-            }
-            println!();
-        }
-        if self.rows > 20 {
-            println!("...");
-        }
-        println!("==========================================\n");
     }
 }
