@@ -959,6 +959,18 @@ impl<'a> SmartIntersection<'a> {
                 continue;
             }
 
+            // Create a normalized pair (smaller ID first) to avoid counting (2,3) and (3,2) as different
+            let pair = if current_vehicle.id < other_vehicle.id {
+                (current_vehicle.id, other_vehicle.id)
+            } else {
+                (other_vehicle.id, current_vehicle.id)
+            };
+
+            // Skip if we already processed this pair this frame
+            if self.close_call_pairs_this_frame.contains(&pair) {
+                continue;
+            }
+
             let distance = current_vehicle.distance_to_vehicle(other_vehicle);
             let min_safe_distance = 30.0;
 
