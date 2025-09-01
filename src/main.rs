@@ -47,7 +47,7 @@ fn run_game(
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => {
-                    return Ok(None); // Quit the whole application
+                    return Ok(Some(intersection.get_final_stats()));// Quit the whole application
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Escape),
