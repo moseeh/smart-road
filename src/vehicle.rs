@@ -1,4 +1,4 @@
-use crate::route::{Direction, Route};
+use crate::route::*;
 use crate::velocities::Velocity;
 use rand::Rng;
 use sdl2::image::LoadTexture;
@@ -294,5 +294,32 @@ impl<'a> Vehicle<'a> {
             || self.position.0 > 1000.0
             || self.position.1 < 0.0
             || self.position.1 > 1000.0
+    }
+    pub fn get_velocity(&self, time: f32) -> f32 {
+        if time <= 0.0 {
+            return 0.0;
+        }
+
+        match self.route {
+            Route::Straight => {
+                // For straight routes, displacement is simply the canvas distance
+                match self.direction {
+                    Direction::North => 1000.0 / time, // From bottom (980) to top (0)
+                    Direction::South => 1000.0 / time, // From top (0) to bottom (1000)
+                    Direction::East => 1000.0 / time,  // From left (0) to right (1000)
+                    Direction::West => 1000.0 / time,  // From right (980) to left (0)
+                }
+            }
+            Route::Left | Route::Right => {
+                // True displacement (straight-line from spawn to final exit)
+                let spawn_pos = get_spawn_position(self.direction, self.route);
+                let exit_pos = self.calculate_exit_position();
+
+                let dx = (exit_pos.0 - spawn_pos.0).abs();
+                let dy = (exit_pos.1 - spawn_pos.1).abs();
+                let displacement = (dx * dx + dy * dy).sqrt();
+                displacement / time
+            }
+        }
     }
 }
