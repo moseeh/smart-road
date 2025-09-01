@@ -61,6 +61,7 @@ pub struct SmartIntersection<'a> {
     pub min_time_in_intersection: f32,
     pub close_calls: u32,
     pub is_running: bool,
+    pub close_call_pairs_this_frame: std::collections::HashSet<(usize, usize)>,
 
     vehicle_intersection_times: HashMap<usize, f32>,
 }
