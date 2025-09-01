@@ -972,16 +972,14 @@ impl<'a> SmartIntersection<'a> {
             }
 
             let distance = current_vehicle.distance_to_vehicle(other_vehicle);
-            let min_safe_distance = 30.0;
+            let min_safe_distance = 5.0;
 
             if distance < min_safe_distance
-                && (current_vehicle.is_in_intersection() || other_vehicle.is_in_intersection())
+                && (current_vehicle.is_in_intersection() && other_vehicle.is_in_intersection())
             {
                 self.close_calls += 1;
-                // println!(
-                //     "Close call detected between vehicles {} and {} at distance {:.1}",
-                //     current_vehicle.id, other_vehicle.id, distance
-                // );
+                self.close_call_pairs_this_frame.insert(pair);
+               
             }
         }
     }
