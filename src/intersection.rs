@@ -842,37 +842,6 @@ impl<'a> SmartIntersection<'a> {
         true
     }
 
-    fn track_intersection_times(&mut self, current_time: f32) {
-        let mut to_remove = Vec::new();
-
-        for vehicle in &self.active_vehicles {
-            let vehicle_id = vehicle.id;
-
-            if vehicle.is_in_intersection() {
-                if !self.vehicle_intersection_times.contains_key(&vehicle_id) {
-                    self.vehicle_intersection_times
-                        .insert(vehicle_id, current_time);
-                }
-            } else if self.vehicle_intersection_times.contains_key(&vehicle_id) {
-                let entry_time = self.vehicle_intersection_times[&vehicle_id];
-                let time_in_intersection = current_time - entry_time;
-
-                if time_in_intersection > self.max_time_in_intersection {
-                    self.max_time_in_intersection = time_in_intersection;
-                }
-                if time_in_intersection < self.min_time_in_intersection {
-                    self.min_time_in_intersection = time_in_intersection;
-                }
-
-                to_remove.push(vehicle_id);
-            }
-        }
-
-        for id in to_remove {
-            self.vehicle_intersection_times.remove(&id);
-        }
-    }
-
     fn update_stats_for_exiting_vehicle_by_data(
         &mut self,
         vehicle_id: usize,
