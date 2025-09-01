@@ -1,6 +1,8 @@
 use sdl2::event::Event;
 use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
 use std::time::Duration;
 mod intersection;
 mod route;
@@ -15,15 +17,10 @@ const WINDOW_WIDTH: u32 = 1000;
 const WINDOW_HEIGHT: u32 = 1000;
 const FRAME_DELAY: Duration = Duration::from_millis(16);
 
-fn main() -> Result<(), String> {
-    // Initialize SDL2
-    let sdl_context = sdl2::init()?;
-    let video_subsystem = sdl_context.video()?;
-
-    // Initialize SDL2_image (for PNG/JPG support)
-    let _image_context = sdl2::image::init(InitFlag::PNG | InitFlag::JPG)?;
-
-    // Create window and canvas
+fn run_game(
+    sdl_context: &sdl2::Sdl,
+    video_subsystem: &sdl2::VideoSubsystem,
+) -> Result<Option<String>, String> {
     let window = video_subsystem
         .window("SMART ROAD", WINDOW_WIDTH, WINDOW_HEIGHT)
         .position_centered()
@@ -32,72 +29,61 @@ fn main() -> Result<(), String> {
 
     let mut canvas = window
         .into_canvas()
-        .present_vsync() // limits framerate to monitor's refresh rate
+        .present_vsync()
         .build()
         .map_err(|e| e.to_string())?;
 
-    // Load the road image from assets
     let texture_creator = canvas.texture_creator();
     let road_texture =
         texture_creator.load_texture("assets/road-intersection/road-intersection.png")?;
 
-    // Initialize intersection - now it manages everything
     let mut intersection = SmartIntersection::new();
     let mut current_time = 0.0f32;
 
     let mut event_pump = sdl_context.event_pump()?;
-    'running: loop {
-        // Increment time (assuming 60 FPS = 1/60 second per frame)
+    loop {
         current_time += 1.0 / 60.0;
 
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
+                Event::Quit { .. } => {
+                    return Ok(None); // Quit the whole application
+                }
+                Event::KeyDown {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => {
-                    // Print final statistics before exiting
-                    intersection.print_final_stats();
-                    break 'running;
+                    return Ok(Some(intersection.get_final_stats()));
                 }
-
-                // Vehicle creation events
                 Event::KeyDown {
                     keycode: Some(key), ..
-                } => {
-                    match key {
-                        // Direction-specific spawning
-                        Keycode::Up => {
-                            intersection.spawn_vehicle(&texture_creator, Some(Direction::North));
-                        }
-                        Keycode::Down => {
-                            intersection.spawn_vehicle(&texture_creator, Some(Direction::South));
-                        }
-                        Keycode::Right => {
-                            intersection.spawn_vehicle(&texture_creator, Some(Direction::East));
-                        }
-                        Keycode::Left => {
-                            intersection.spawn_vehicle(&texture_creator, Some(Direction::West));
-                        }
-                        Keycode::R => {
-                            intersection.spawn_vehicle(&texture_creator, None); // Random direction
-                        }
-                        _ => {}
+                } => match key {
+                    Keycode::Up => {
+                        intersection.spawn_vehicle(&texture_creator, Some(Direction::North));
                     }
-                }
+                    Keycode::Down => {
+                        intersection.spawn_vehicle(&texture_creator, Some(Direction::South));
+                    }
+                    Keycode::Right => {
+                        intersection.spawn_vehicle(&texture_creator, Some(Direction::East));
+                    }
+                    Keycode::Left => {
+                        intersection.spawn_vehicle(&texture_creator, Some(Direction::West));
+                    }
+                    Keycode::R => {
+                        intersection.spawn_vehicle(&texture_creator, None);
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
 
-        // Update intersection (handles all vehicles)
         intersection.update(current_time);
 
-        // Clear screen and draw
         canvas.clear();
         canvas.copy(&road_texture, None, None)?;
 
-        // Draw all vehicles managed by intersection
         for vehicle in &intersection.active_vehicles {
             let dest_rect = sdl2::rect::Rect::new(
                 vehicle.position.0 as i32,
@@ -119,6 +105,93 @@ fn main() -> Result<(), String> {
 
         canvas.present();
         std::thread::sleep(FRAME_DELAY);
+    }
+}
+
+fn show_stats(
+    sdl_context: &sdl2::Sdl,
+    video_subsystem: &sdl2::VideoSubsystem,
+    ttf_context: &sdl2::ttf::Sdl2TtfContext,
+    stats_text: &str,
+) -> Result<(), String> {
+    let window = video_subsystem
+        .window("Statistics", 1000, 1000)
+        .position_centered()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut canvas = window
+        .into_canvas()
+        .present_vsync()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let texture_creator = canvas.texture_creator();
+    let font = ttf_context.load_font("assets/fonts/OpenSans-Bold.ttf", 24)?;
+
+    let mut event_pump = sdl_context.event_pump()?;
+    
+    let lines: Vec<&str> = stats_text.split('\n').collect();
+    let mut y = 50;
+
+    'stats_running: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
+                    break 'stats_running;
+                }
+                _ => {}
+            }
+        }
+
+        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        canvas.clear();
+
+        for line in &lines {
+            if line.is_empty() {
+                y += 10; // Add some space for empty lines
+                continue;
+            }
+            let surface = font
+                .render(line)
+                .shaded(Color::RGBA(0, 0, 0, 255), Color::RGBA(255, 255, 255, 255))
+                .map_err(|e| e.to_string())?;
+            
+            let texture = texture_creator
+                .create_texture_from_surface(&surface)
+                .map_err(|e| e.to_string())?;
+
+            let query = texture.query();
+            let target_rect = Rect::new(
+                (1000 - query.width as i32) / 2,
+                y,
+                query.width,
+                query.height,
+            );
+            canvas.copy(&texture, None, target_rect)?;
+            y += query.height as i32 + 5; // Move y for the next line
+        }
+        y = 50; // Reset y for the next frame
+
+        canvas.present();
+        std::thread::sleep(FRAME_DELAY);
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<(), String> {
+    let sdl_context = sdl2::init()?;
+    let video_subsystem = sdl_context.video()?;
+    let _image_context = sdl2::image::init(InitFlag::PNG | InitFlag::JPG)?;
+    let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
+
+    if let Some(stats) = run_game(&sdl_context, &video_subsystem)? {
+        show_stats(&sdl_context, &video_subsystem, &ttf_context, &stats)?;
     }
 
     Ok(())
