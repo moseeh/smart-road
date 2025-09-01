@@ -86,6 +86,7 @@ impl<'a> SmartIntersection<'a> {
             min_time_in_intersection: f32::MAX,
             close_calls: 0,
             is_running: true,
+            close_call_pairs_this_frame: std::collections::HashSet::new(),
             vehicle_intersection_times: HashMap::new(),
         };
 
