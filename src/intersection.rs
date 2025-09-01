@@ -59,7 +59,7 @@ pub struct SmartIntersection<'a> {
     pub max_time_in_intersection: f32,
     pub min_time_in_intersection: f32,
     pub close_calls: u32,
-    
+
     pub close_call_pairs_this_frame: std::collections::HashSet<(usize, usize)>,
 
     vehicle_intersection_times: HashMap<usize, f32>,
@@ -84,7 +84,7 @@ impl<'a> SmartIntersection<'a> {
             max_time_in_intersection: 0.0,
             min_time_in_intersection: f32::MAX,
             close_calls: 0,
-            
+
             close_call_pairs_this_frame: std::collections::HashSet::new(),
             vehicle_intersection_times: HashMap::new(),
         };
@@ -408,7 +408,6 @@ impl<'a> SmartIntersection<'a> {
             self.update_stats_for_exiting_vehicle_by_data(vehicle_id, current_speed, current_time);
         }
 
-        self.track_intersection_times(current_time);
     }
 
     /// Updated vehicle management with two-path system
@@ -912,12 +911,21 @@ impl<'a> SmartIntersection<'a> {
     }
 
     pub fn get_final_stats(&self) -> String {
-        format!("SMART INTERSECTION FINAL STATISTICS\n\nTotal vehicles passed: {}\nMax velocity recorded: {:.1} pixels/frame\nMin velocity recorded: {:.1} pixels/frame\nMax time in intersection: {:.2} seconds\nMin time in intersection: {:.2} seconds\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
+        format!(
+            "SMART INTERSECTION FINAL STATISTICS\n\nTotal vehicles passed: {}\nMax velocity recorded: {:.1} pixels/frame\nMin velocity recorded: {:.1} pixels/frame\nMax time in intersection: {:.2} seconds\nMin time in intersection: {:.2} seconds\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
             self.total_vehicles_passed,
             self.max_velocity_recorded,
-            if self.min_velocity_recorded == f32::MAX { 0.0 } else { self.min_velocity_recorded },
+            if self.min_velocity_recorded == f32::MAX {
+                0.0
+            } else {
+                self.min_velocity_recorded
+            },
             self.max_time_in_intersection,
-            if self.min_time_in_intersection == f32::MAX { 0.0 } else { self.min_time_in_intersection },
+            if self.min_time_in_intersection == f32::MAX {
+                0.0
+            } else {
+                self.min_time_in_intersection
+            },
             self.close_calls,
             self.active_vehicles.len()
         )
