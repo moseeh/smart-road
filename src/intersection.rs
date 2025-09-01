@@ -928,7 +928,7 @@ impl<'a> SmartIntersection<'a> {
     }
 
     pub fn get_final_stats(&self) -> String {
-        format!("SMART INTERSECTION FINAL STATISTICS\n\nTotal vehicles passed: {}\nMax velocity recorded: {:.1} pixels/frame\nMin velocity recorded: {:.1} pixels/frame\nMax time in intersection: {:.2} seconds\nMin time in intersection: {:.2} seconds\nClose calls detected: {}\nActive vehicles remaining: {}\n",
+        format!("SMART INTERSECTION FINAL STATISTICS\n\nTotal vehicles passed: {}\nMax velocity recorded: {:.1} pixels/frame\nMin velocity recorded: {:.1} pixels/frame\nMax time in intersection: {:.2} seconds\nMin time in intersection: {:.2} seconds\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
             self.total_vehicles_passed,
             self.max_velocity_recorded,
             if self.min_velocity_recorded == f32::MAX { 0.0 } else { self.min_velocity_recorded },
