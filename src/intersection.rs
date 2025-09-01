@@ -395,19 +395,28 @@ impl<'a> SmartIntersection<'a> {
     pub fn update(&mut self, current_time: f32) {
         self.update_vehicles_with_two_path_system(current_time);
 
-        // Remove vehicles that left canvas
+        // Collect vehicle data first (without borrowing self mutably)
         let mut vehicles_to_remove = Vec::new();
         for (i, vehicle) in self.active_vehicles.iter().enumerate() {
             if vehicle.is_outside_canvas() {
-                vehicles_to_remove.push((i, vehicle.id, vehicle.current_speed));
+                let vehicle_velocity = vehicle.get_velocity(current_time);
+                vehicles_to_remove.push((i, vehicle.id, vehicle_velocity));
             }
         }
 
-        for &(i, vehicle_id, current_speed) in vehicles_to_remove.iter().rev() {
-            self.active_vehicles.remove(i);
-            self.update_stats_for_exiting_vehicle_by_data(vehicle_id, current_speed, current_time);
+        // Process the collected data (now we can borrow self mutably)
+        for &(_, vehicle_id, vehicle_velocity) in &vehicles_to_remove {
+            self.update_stats_for_exiting_vehicle_by_data(
+                vehicle_id,
+                vehicle_velocity,
+                current_time,
+            );
         }
 
+        // Remove vehicles (in reverse order to maintain correct indices)
+        for &(i, _vehicle_id, _) in vehicles_to_remove.iter().rev() {
+            self.active_vehicles.remove(i);
+        }
     }
 
     /// Updated vehicle management with two-path system
@@ -844,17 +853,11 @@ impl<'a> SmartIntersection<'a> {
     fn update_stats_for_exiting_vehicle_by_data(
         &mut self,
         vehicle_id: usize,
-        current_speed: Velocity,
+        vehicle_velocity: f32,
         current_time: f32,
     ) {
         self.total_vehicles_passed += 1;
 
-        let vehicle_max_speed = match current_speed {
-            Velocity::Slow => 3.0,
-            Velocity::Medium => 5.0,
-            Velocity::Fast => 7.0,
-            Velocity::Stopped => 0.0,
-        };
         let entry_time = self.vehicle_intersection_times[&vehicle_id];
         let time_in_intersection = current_time - entry_time;
 
@@ -865,11 +868,11 @@ impl<'a> SmartIntersection<'a> {
             self.min_time_in_intersection = time_in_intersection;
         }
 
-        if vehicle_max_speed > self.max_velocity_recorded {
-            self.max_velocity_recorded = vehicle_max_speed;
+        if vehicle_velocity > self.max_velocity_recorded {
+            self.max_velocity_recorded = vehicle_velocity;
         }
-        if vehicle_max_speed < self.min_velocity_recorded {
-            self.min_velocity_recorded = vehicle_max_speed;
+        if vehicle_velocity < self.min_velocity_recorded {
+            self.min_velocity_recorded = vehicle_velocity;
         }
 
         self.vehicle_intersection_times.remove(&vehicle_id);
@@ -912,7 +915,7 @@ impl<'a> SmartIntersection<'a> {
 
     pub fn get_final_stats(&self) -> String {
         format!(
-            "SMART INTERSECTION FINAL STATISTICS\n\nTotal vehicles passed: {}\nMax velocity recorded: {:.1} pixels/frame\nMin velocity recorded: {:.1} pixels/frame\nMax time in intersection: {:.2} seconds\nMin time in intersection: {:.2} seconds\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
+            "SMART INTERSECTION FINAL STATISTICS\n\nTotal vehicles passed: {}\nMax velocity recorded: {:.1} pixels/second\nMin velocity recorded: {:.1} pixels/frame\nMax time in intersection: {:.2} seconds\nMin time in intersection: {:.2} seconds\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
             self.total_vehicles_passed,
             self.max_velocity_recorded,
             if self.min_velocity_recorded == f32::MAX {
