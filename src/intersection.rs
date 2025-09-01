@@ -36,7 +36,6 @@ struct PathSegment {
 struct VehiclePath {
     segment1: PathSegment, // Entry to turn position (or full path for straight)
     segment2: Option<PathSegment>, // Turn position to exit (None for straight)
-    turn_position: Option<(f32, f32)>, // Where the vehicle turns (None for straight)
 }
 
 type PathCache = HashMap<(Direction, Route), VehiclePath>;
@@ -132,7 +131,6 @@ impl<'a> SmartIntersection<'a> {
                 VehiclePath {
                     segment1: PathSegment { cells, distance },
                     segment2: None,
-                    turn_position: None,
                 }
             }
             Route::Right | Route::Left => {
@@ -151,7 +149,6 @@ impl<'a> SmartIntersection<'a> {
                         cells: segment2_cells,
                         distance: segment2_distance,
                     }),
-                    turn_position: Some(turn_pos),
                 }
             }
         }
