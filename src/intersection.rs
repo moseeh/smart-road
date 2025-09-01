@@ -798,6 +798,7 @@ impl<'a> SmartIntersection<'a> {
         &mut self,
         texture_creator: &'a TextureCreator<WindowContext>,
         direction: Option<Direction>,
+        current_time: f32,
     ) {
         let dir = match direction {
             Some(d) => d,
@@ -811,7 +812,12 @@ impl<'a> SmartIntersection<'a> {
         if self.is_safe_to_spawn(dir, route, spawn_pos) {
             match Vehicle::new(texture_creator, route, dir, spawn_pos, turn_pos) {
                 Ok(vehicle) => {
+                    let vehicle_id = vehicle.id;
                     self.active_vehicles.push(vehicle);
+                    if !self.vehicle_intersection_times.contains_key(&vehicle_id) {
+                        self.vehicle_intersection_times
+                            .insert(vehicle_id, current_time);
+                    }
                 }
                 Err(e) => println!("Failed to create vehicle: {}", e),
             }
