@@ -454,8 +454,8 @@ impl<'a> SmartIntersection<'a> {
             }
 
             if closest_distance != f32::MAX && closest_distance < required_distance {
-                if closest_distance < required_distance * 0.4 {
-                    target_speed = Velocity::Slow;
+                if closest_distance < required_distance * 0.7 {
+                    target_speed = Velocity::Stopped
                 } else if closest_distance < required_distance * 0.8 {
                     target_speed = Velocity::Medium;
                 }
@@ -489,7 +489,7 @@ impl<'a> SmartIntersection<'a> {
 
             let intersection_speed = if is_past_intersection {
                 Velocity::Fast
-            } else if distance_to_intersection > 120.0 {
+            } else if distance_to_intersection > 60.0 {
                 Velocity::Fast
             } else if is_in_intersection {
                 Velocity::Fast
