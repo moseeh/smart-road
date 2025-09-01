@@ -148,7 +148,7 @@ fn show_stats(
             }
         }
 
-        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        canvas.set_draw_color(Color::RGB(0, 255, 255));
         canvas.clear();
 
         for line in &lines {
