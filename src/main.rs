@@ -158,7 +158,7 @@ fn show_stats(
             }
             let surface = font
                 .render(line)
-                .shaded(Color::RGBA(0, 0, 0, 255), Color::RGBA(255, 255, 255, 255))
+                .shaded(Color::RGBA(0, 0, 0, 255), Color::RGBA(0, 255, 255, 255))
                 .map_err(|e| e.to_string())?;
             
             let texture = texture_creator
