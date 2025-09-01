@@ -59,7 +59,7 @@ pub struct SmartIntersection<'a> {
     pub max_time_in_intersection: f32,
     pub min_time_in_intersection: f32,
     pub close_calls: u32,
-    pub is_running: bool,
+    
     pub close_call_pairs_this_frame: std::collections::HashSet<(usize, usize)>,
 
     vehicle_intersection_times: HashMap<usize, f32>,
@@ -84,7 +84,7 @@ impl<'a> SmartIntersection<'a> {
             max_time_in_intersection: 0.0,
             min_time_in_intersection: f32::MAX,
             close_calls: 0,
-            is_running: true,
+            
             close_call_pairs_this_frame: std::collections::HashSet::new(),
             vehicle_intersection_times: HashMap::new(),
         };
@@ -927,36 +927,16 @@ impl<'a> SmartIntersection<'a> {
         }
     }
 
-    pub fn print_final_stats(&self) {
-        println!("\n=== SMART INTERSECTION FINAL STATISTICS ===");
-        println!("Total vehicles passed: {}", self.total_vehicles_passed);
-        println!(
-            "Max velocity recorded: {:.1} pixels/frame",
-            self.max_velocity_recorded
-        );
-        println!(
-            "Min velocity recorded: {:.1} pixels/frame",
-            if self.min_velocity_recorded == f32::MAX {
-                0.0
-            } else {
-                self.min_velocity_recorded
-            }
-        );
-        println!(
-            "Max time in intersection: {:.2} seconds",
-            self.max_time_in_intersection
-        );
-        println!(
-            "Min time in intersection: {:.2} seconds",
-            if self.min_time_in_intersection == f32::MAX {
-                0.0
-            } else {
-                self.min_time_in_intersection
-            }
-        );
-        println!("Close calls detected: {}", self.close_calls);
-        println!("Active vehicles remaining: {}", self.active_vehicles.len());
-        println!("==========================================\n");
+    pub fn get_final_stats(&self) -> String {
+        format!("SMART INTERSECTION FINAL STATISTICS\n\nTotal vehicles passed: {}\nMax velocity recorded: {:.1} pixels/frame\nMin velocity recorded: {:.1} pixels/frame\nMax time in intersection: {:.2} seconds\nMin time in intersection: {:.2} seconds\nClose calls detected: {}\nActive vehicles remaining: {}\n",
+            self.total_vehicles_passed,
+            self.max_velocity_recorded,
+            if self.min_velocity_recorded == f32::MAX { 0.0 } else { self.min_velocity_recorded },
+            self.max_time_in_intersection,
+            if self.min_time_in_intersection == f32::MAX { 0.0 } else { self.min_time_in_intersection },
+            self.close_calls,
+            self.active_vehicles.len()
+        )
     }
 
     fn release_specific_cells(&mut self, cells: &[(usize, usize)], vehicle_id: usize) {
