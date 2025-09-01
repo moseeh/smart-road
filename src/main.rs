@@ -47,7 +47,7 @@ fn run_game(
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => {
-                    return Ok(Some(intersection.get_final_stats()));// Quit the whole application
+                    return Ok(Some(intersection.get_final_stats())); // Quit the whole application
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Escape),
@@ -59,19 +59,35 @@ fn run_game(
                     keycode: Some(key), ..
                 } => match key {
                     Keycode::Up => {
-                        intersection.spawn_vehicle(&texture_creator, Some(Direction::North));
+                        intersection.spawn_vehicle(
+                            &texture_creator,
+                            Some(Direction::North),
+                            current_time,
+                        );
                     }
                     Keycode::Down => {
-                        intersection.spawn_vehicle(&texture_creator, Some(Direction::South));
+                        intersection.spawn_vehicle(
+                            &texture_creator,
+                            Some(Direction::South),
+                            current_time,
+                        );
                     }
                     Keycode::Right => {
-                        intersection.spawn_vehicle(&texture_creator, Some(Direction::East));
+                        intersection.spawn_vehicle(
+                            &texture_creator,
+                            Some(Direction::East),
+                            current_time,
+                        );
                     }
                     Keycode::Left => {
-                        intersection.spawn_vehicle(&texture_creator, Some(Direction::West));
+                        intersection.spawn_vehicle(
+                            &texture_creator,
+                            Some(Direction::West),
+                            current_time,
+                        );
                     }
                     Keycode::R => {
-                        intersection.spawn_vehicle(&texture_creator, None);
+                        intersection.spawn_vehicle(&texture_creator, None, current_time);
                     }
                     _ => {}
                 },
@@ -130,7 +146,7 @@ fn show_stats(
     let font = ttf_context.load_font("assets/fonts/OpenSans-Bold.ttf", 24)?;
 
     let mut event_pump = sdl_context.event_pump()?;
-    
+
     let lines: Vec<&str> = stats_text.split('\n').collect();
     let mut y = 50;
 
@@ -160,7 +176,7 @@ fn show_stats(
                 .render(line)
                 .shaded(Color::RGBA(0, 0, 0, 255), Color::RGBA(0, 255, 255, 255))
                 .map_err(|e| e.to_string())?;
-            
+
             let texture = texture_creator
                 .create_texture_from_surface(&surface)
                 .map_err(|e| e.to_string())?;
