@@ -10,7 +10,6 @@ mod velocities;
 use intersection::*;
 use route::*;
 
-
 // Constants for the game design
 const WINDOW_WIDTH: u32 = 1000;
 const WINDOW_HEIGHT: u32 = 1000;
@@ -45,32 +44,11 @@ fn main() -> Result<(), String> {
     // Initialize intersection - now it manages everything
     let mut intersection = SmartIntersection::new();
     let mut current_time = 0.0f32;
-    let mut frame_count = 0u32;
-
-    println!("🚦 Smart Intersection Simulation Started!");
-    println!("Controls:");
-    println!("  Arrow Keys - Spawn vehicles from specific directions");
-    println!("  R - Spawn vehicle from random direction");
-    println!("  ESC - Exit simulation");
-    println!("  G - Print current grid state");
-    println!("  S - Print grid statistics");
-    println!("  V - Print grid with vehicle IDs");
 
     let mut event_pump = sdl_context.event_pump()?;
     'running: loop {
         // Increment time (assuming 60 FPS = 1/60 second per frame)
         current_time += 1.0 / 60.0;
-        frame_count += 1;
-
-        // Print grid state periodically (every 3 seconds)
-        if frame_count % 120 == 0 {
-            intersection.print_grid_stats(current_time);
-        }
-
-        // Print detailed grid every 5 seconds
-        if frame_count % 180 == 0 {
-            intersection.print_grid(current_time);
-        }
 
         for event in event_pump.poll_iter() {
             match event {
@@ -104,33 +82,6 @@ fn main() -> Result<(), String> {
                         }
                         Keycode::R => {
                             intersection.spawn_vehicle(&texture_creator, None); // Random direction
-                        }
-
-                        // Debug output controls
-                        Keycode::G => {
-                            println!("\n🔍 Manual Grid State Request:");
-                            intersection.print_grid(current_time);
-                        }
-                        Keycode::S => {
-                            println!("\n📊 Manual Statistics Request:");
-                            intersection.print_grid_stats(current_time);
-                        }
-                        Keycode::V => {
-                            println!("\n🚗 Manual Vehicle ID Grid Request:");
-                            intersection.print_grid_with_vehicle_ids(current_time);
-                        }
-                        Keycode::D => {
-                            // Print details about all active vehicle paths
-                            println!("\n🛣️  Active Vehicle Path Details:");
-                            for vehicle in &intersection.active_vehicles {
-                                if !vehicle.is_past_intersection() {
-                                    let distance = vehicle.distance_to_intersection();
-                                    println!(
-                                        "Vehicle {}: {:?} {:?}, Distance to intersection: {:.1}",
-                                        vehicle.id, vehicle.direction, vehicle.route, distance
-                                    );
-                                }
-                            }
                         }
                         _ => {}
                     }
