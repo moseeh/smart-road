@@ -98,7 +98,7 @@ pub fn show_stats(
 
     let lines: Vec<&str> = stats_text.split('\n').collect();
 
-    // First pass: calculate the maximum label width for alignment
+    // First pass: calculate the maximum label WIDTH in pixels for alignment
     let mut max_label_width = 0u32;
     for line in &lines {
         if line.contains(':') && !line.contains("Press esc") {
@@ -195,7 +195,7 @@ pub fn show_stats(
             if i == 0 {
                 let surface = title_font
                     .render(line)
-                    .blended(Color::RGB(255, 255, 255)) // White title
+                    .blended(Color::RGB(0, 191, 255)) // Deep sky blue title
                     .map_err(|e| e.to_string())?;
 
                 let texture = texture_creator
@@ -244,7 +244,7 @@ pub fn show_stats(
                     for offset_y in [-1, 0, 1] {
                         let glow_surface = font
                             .render(esc_text)
-                            .blended(Color::RGB(255, 255, 0)) // Yellow glow
+                            .blended(Color::RGB(255, 100, 0)) // Bright orange glow
                             .map_err(|e| e.to_string())?;
 
                         let glow_texture = texture_creator
@@ -295,18 +295,26 @@ pub fn show_stats(
                 continue;
             }
 
-            // Handle lines with colons (stats data) with left-aligned padding
+            // Handle lines with colons (stats data) with pixel-perfect alignment
             if line.contains(':') {
                 let parts: Vec<&str> = line.splitn(2, ':').collect();
                 if parts.len() == 2 {
                     let label = parts[0].trim();
                     let value = parts[1].trim();
 
+                    // Render label to get its actual width
                     let label_surface = font
                         .render(label)
                         .blended(Color::RGB(255, 255, 255)) // White labels
                         .map_err(|e| e.to_string())?;
 
+                    let label_texture = texture_creator
+                        .create_texture_from_surface(&label_surface)
+                        .map_err(|e| e.to_string())?;
+
+                    let label_query = label_texture.query();
+
+                    // Render colon and value
                     let colon_surface = font
                         .render(": ")
                         .blended(Color::RGB(255, 255, 255)) // White colon
@@ -317,11 +325,6 @@ pub fn show_stats(
                         .blended(Color::RGB(255, 255, 0)) // Yellow values
                         .map_err(|e| e.to_string())?;
 
-                    // Create textures
-                    let label_texture = texture_creator
-                        .create_texture_from_surface(&label_surface)
-                        .map_err(|e| e.to_string())?;
-
                     let colon_texture = texture_creator
                         .create_texture_from_surface(&colon_surface)
                         .map_err(|e| e.to_string())?;
@@ -330,31 +333,25 @@ pub fn show_stats(
                         .create_texture_from_surface(&value_surface)
                         .map_err(|e| e.to_string())?;
 
-                    // Get dimensions
-                    let label_query = label_texture.query();
                     let colon_query = colon_texture.query();
                     let value_query = value_texture.query();
 
-                    // Calculate total width using max label width for alignment
-                    let total_width = max_label_width + colon_query.width + value_query.width;
-                    let start_x = (1000 - total_width as i32) / 2;
+                    // Position everything with pixel-perfect alignment
+                    let fixed_start_x = 200; // Fixed left margin
 
-                    // Render label (left-aligned at start position)
-                    let label_rect = Rect::new(start_x, y, label_query.width, label_query.height);
+                    // Render label at fixed position
+                    let label_rect =
+                        Rect::new(fixed_start_x, y, label_query.width, label_query.height);
                     canvas.copy(&label_texture, None, label_rect)?;
 
-                    // Render colon (always at the same x position after max label width)
-                    let colon_rect = Rect::new(
-                        start_x + max_label_width as i32,
-                        y,
-                        colon_query.width,
-                        colon_query.height,
-                    );
+                    // Render colon at the SAME position for all lines (based on max_label_width)
+                    let colon_x = fixed_start_x + max_label_width as i32;
+                    let colon_rect = Rect::new(colon_x, y, colon_query.width, colon_query.height);
                     canvas.copy(&colon_texture, None, colon_rect)?;
 
-                    // Render value (always starts at the same x position)
+                    // Render value immediately after colon
                     let value_rect = Rect::new(
-                        start_x + max_label_width as i32 + colon_query.width as i32,
+                        colon_x + colon_query.width as i32,
                         y,
                         value_query.width,
                         value_query.height,
