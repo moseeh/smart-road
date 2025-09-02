@@ -77,8 +77,8 @@ pub fn show_stats(
     let texture_creator = canvas.texture_creator();
 
     // Load a better font with larger size
-    let font = ttf_context.load_font("assets/fonts/OpenSans-Bold.ttf", 28)?;
-    let title_font = ttf_context.load_font("assets/fonts/OpenSans-Bold.ttf", 36)?;
+    let font = ttf_context.load_font("assets/fonts/Orbitron-VariableFont_wght.ttf", 28)?;
+    let title_font = ttf_context.load_font("assets/fonts/Orbitron-VariableFont_wght.ttf", 36)?;
 
     // Load car textures
     let mut car_textures = Vec::new();
