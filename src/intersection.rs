@@ -918,7 +918,7 @@ impl<'a> SmartIntersection<'a> {
 
     pub fn get_final_stats(&self) -> String {
         format!(
-            "SMART ROAD STATS\n\nTotal vehicles passed: {}\nAverage Velocity: {:.1}\nMax velocity recorded: {:.1} px/s\nMin velocity recorded: {:.1} px/s\nMax time in intersection: {:.2} s\nMin time in intersection: {:.2} s\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
+            "SMART ROAD STATS\n\nTotal vehicles passed: {}\nAverage Velocity: {:.1} px/s\nMax velocity recorded: {:.1} px/s\nMin velocity recorded: {:.1} px/s\nMax time in intersection: {:.2} s\nMin time in intersection: {:.2} s\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
             self.total_vehicles_passed,
             self.total_velocities / self.total_vehicles_passed as f32,
             self.max_velocity_recorded,
