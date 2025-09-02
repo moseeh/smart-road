@@ -4,14 +4,13 @@ use sdl2::keyboard::Keycode;
 use std::time::Duration;
 mod intersection;
 mod route;
-mod vehicle;
 mod stats;
+mod vehicle;
 mod velocities;
 
 use intersection::*;
 use route::*;
 use stats::*;
-
 
 // Constants for the game design
 const WINDOW_WIDTH: u32 = 1000;
@@ -40,6 +39,8 @@ fn run_game(
 
     let mut intersection = SmartIntersection::new();
     let mut current_time = 0.0f32;
+    let mut continuous_spawning = false;
+    let mut spawn_counter = 0;
 
     let mut event_pump = sdl_context.event_pump()?;
     loop {
@@ -88,7 +89,10 @@ fn run_game(
                         );
                     }
                     Keycode::R => {
-                        intersection.spawn_vehicle(&texture_creator, None, current_time);
+                        continuous_spawning = !continuous_spawning;
+                    }
+                    Keycode::S => {
+                        continuous_spawning = false; // Stop spawning 
                     }
                     _ => {}
                 },
@@ -97,6 +101,13 @@ fn run_game(
         }
 
         intersection.update(current_time);
+        if continuous_spawning {
+            spawn_counter += 1;
+            if spawn_counter >= 20 {
+                intersection.spawn_vehicle(&texture_creator, None, current_time);
+                spawn_counter = 0;
+            }
+        }
 
         canvas.clear();
         canvas.copy(&road_texture, None, None)?;
