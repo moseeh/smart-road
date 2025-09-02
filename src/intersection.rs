@@ -53,6 +53,7 @@ pub struct SmartIntersection<'a> {
     path_cache: PathCache,
 
     // Stats
+    pub total_velocities: f32,
     pub total_vehicles_passed: u32,
     pub max_velocity_recorded: f32,
     pub min_velocity_recorded: f32,
@@ -78,6 +79,7 @@ impl<'a> SmartIntersection<'a> {
             rows,
             grid: vec![Cell { slots: Vec::new() }; cols * rows],
             path_cache: HashMap::new(),
+            total_velocities: 0.0,
             total_vehicles_passed: 0,
             max_velocity_recorded: 0.0,
             min_velocity_recorded: f32::MAX,
@@ -856,6 +858,7 @@ impl<'a> SmartIntersection<'a> {
         vehicle_velocity: f32,
         current_time: f32,
     ) {
+        self.total_velocities += vehicle_velocity;
         self.total_vehicles_passed += 1;
 
         let entry_time = self.vehicle_intersection_times[&vehicle_id];
@@ -915,8 +918,9 @@ impl<'a> SmartIntersection<'a> {
 
     pub fn get_final_stats(&self) -> String {
         format!(
-            "SMART INTERSECTION FINAL STATISTICS\n\nTotal vehicles passed: {}\nMax velocity recorded: {:.1} pixels/second\nMin velocity recorded: {:.1} pixels/frame\nMax time in intersection: {:.2} seconds\nMin time in intersection: {:.2} seconds\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
+            "SMART ROAD STATS\n\nTotal vehicles passed: {}\nAverage Velocity: {:.1}\nMax velocity recorded: {:.1} px/s\nMin velocity recorded: {:.1} px/s\nMax time in intersection: {:.2} s\nMin time in intersection: {:.2} s\nClose calls detected: {}\nActive vehicles remaining: {}\n\n\nPress esc button to quit",
             self.total_vehicles_passed,
+            self.total_velocities / self.total_vehicles_passed as f32,
             self.max_velocity_recorded,
             if self.min_velocity_recorded == f32::MAX {
                 0.0
