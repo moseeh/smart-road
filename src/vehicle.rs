@@ -1,4 +1,4 @@
-use crate::route::{Direction, Route};
+use crate::route::*;
 use crate::velocities::Velocity;
 use rand::Rng;
 use sdl2::image::LoadTexture;
@@ -259,6 +259,31 @@ impl<'a> Vehicle<'a> {
             Direction::East | Direction::West => (my_center.0 - other_center.0).abs(),
         }
     }
+    fn calculate_exit_position(&self) -> (f32, f32) {
+        // Use the turn position to determine the appropriate exit position
+        let turn_pos = self.turn_position;
+
+        // Determine final direction after turn
+        let final_direction = match (self.direction, self.route) {
+            (Direction::North, Route::Right) => Direction::East,
+            (Direction::North, Route::Left) => Direction::West,
+            (Direction::South, Route::Right) => Direction::West,
+            (Direction::South, Route::Left) => Direction::East,
+            (Direction::East, Route::Right) => Direction::South,
+            (Direction::East, Route::Left) => Direction::North,
+            (Direction::West, Route::Right) => Direction::North,
+            (Direction::West, Route::Left) => Direction::South,
+            _ => self.direction,
+        };
+
+        // Exit position maintains the same lane position (x or y) as the turn position
+        match final_direction {
+            Direction::North => (turn_pos.0, 0.0), // Keep x from turn, exit at top
+            Direction::South => (turn_pos.0, 1000.0), // Keep x from turn, exit at bottom
+            Direction::East => (1000.0, turn_pos.1), // Keep y from turn, exit at right
+            Direction::West => (0.0, turn_pos.1),  // Keep y from turn, exit at left
+        }
+    }
 
     pub fn get_safe_following_distance(&self, _lead_vehicle: &Vehicle) -> f32 {
         70.0 + self.safety_distance
@@ -269,5 +294,32 @@ impl<'a> Vehicle<'a> {
             || self.position.0 > 1000.0
             || self.position.1 < 0.0
             || self.position.1 > 1000.0
+    }
+    pub fn get_velocity(&self, time: f32) -> f32 {
+        if time <= 0.0 {
+            return 0.0;
+        }
+
+        match self.route {
+            Route::Straight => {
+                // For straight routes, displacement is simply the canvas distance
+                match self.direction {
+                    Direction::North => 1000.0 / time, // From bottom (980) to top (0)
+                    Direction::South => 1000.0 / time, // From top (0) to bottom (1000)
+                    Direction::East => 1000.0 / time,  // From left (0) to right (1000)
+                    Direction::West => 1000.0 / time,  // From right (980) to left (0)
+                }
+            }
+            Route::Left | Route::Right => {
+                // True displacement (straight-line from spawn to final exit)
+                let spawn_pos = get_spawn_position(self.direction, self.route);
+                let exit_pos = self.calculate_exit_position();
+
+                let dx = (exit_pos.0 - spawn_pos.0).abs();
+                let dy = (exit_pos.1 - spawn_pos.1).abs();
+                let displacement = (dx * dx + dy * dy).sqrt();
+                displacement / time
+            }
+        }
     }
 }
